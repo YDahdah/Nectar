@@ -157,104 +157,124 @@ app.use(errorHandler);
 export default app;
 
 // Start server if running directly
-// Check if this file is being run directly
-const __filename = fileURLToPath(import.meta.url);
+const PORT = process.env.PORT || 3000;
 
-// Check if we're running in Cloud Run environment
-const isCloudRun = !!process.env.K_SERVICE;
-const isCloudEnvironment = isCloudRun;
+const server = app.listen(PORT, () => {
+  logger.info(`🚀 Server running on port ${PORT}`);
+  logger.info(`📍 Health check: http://localhost:${PORT}/health`);
+  logger.info(`📍 API info: http://localhost:${PORT}/api`);
+  logger.info(`Environment: ${config.nodeEnv}`);
+});
 
-// Normalize paths for comparison (handle Windows backslashes)
-const normalizePath = (path) => path?.replace(/\\/g, "/").toLowerCase();
-const mainModulePath = normalizePath(process.argv[1]);
-const currentFilePath = normalizePath(__filename);
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM received, shutting down...");
+  server.close(() => process.exit(0));
+});
 
-// Check if this is the main module being executed
-// IMPORTANT: Never start server if we're in Cloud Run environment
-const isMainModule =
-  !isCloudEnvironment &&
-  mainModulePath &&
-  (mainModulePath.endsWith("server.js") ||
-    mainModulePath === currentFilePath ||
-    mainModulePath.includes("server.js"));
+process.on("SIGINT", () => {
+  logger.info("SIGINT received, shutting down...");
+  server.close(() => process.exit(0));
+});
 
-// Log for debugging
-logger.info(
-  `Main module check: mainPath=${mainModulePath}, currentPath=${currentFilePath}, isMain=${isMainModule}, isCloudEnv=${isCloudEnvironment}`,
-);
+// // Check if this file is being run directly
+// const __filename = fileURLToPath(import.meta.url);
 
-if (isMainModule) {
-  const startServer = async (port) => {
-    return new Promise((resolve, reject) => {
-      const server = app.listen(port, () => {
-        logger.info(`🚀 Server running on port ${port}`);
-        logger.info(`📍 Health check: http://localhost:${port}/health`);
-        logger.info(`📍 API info: http://localhost:${port}/api`);
-        logger.info(`Environment: ${config.nodeEnv}`);
-        resolve(server);
-      });
+// // Check if we're running in Cloud Run environment
+// const isCloudRun = !!process.env.K_SERVICE;
+// const isCloudEnvironment = isCloudRun;
 
-      server.on("error", (error) => {
-        if (error.code === "EADDRINUSE") {
-          reject(error);
-        } else {
-          logger.error("❌ Server error:", error);
-          reject(error);
-        }
-      });
-    });
-  };
+// // Normalize paths for comparison (handle Windows backslashes)
+// const normalizePath = (path) => path?.replace(/\\/g, "/").toLowerCase();
+// const mainModulePath = normalizePath(process.argv[1]);
+// const currentFilePath = normalizePath(__filename);
 
-  const tryStartServer = async () => {
-    const basePort = config.port || 3000;
-    let port = basePort;
-    let attempts = 0;
-    const maxAttempts = 10;
+// // Check if this is the main module being executed
+// // IMPORTANT: Never start server if we're in Cloud Run environment
+// const isMainModule =
+//   !isCloudEnvironment &&
+//   mainModulePath &&
+//   (mainModulePath.endsWith("server.js") ||
+//     mainModulePath === currentFilePath ||
+//     mainModulePath.includes("server.js"));
 
-    while (attempts < maxAttempts) {
-      try {
-        logger.info(`Attempting to start server on port ${port}...`);
-        const server = await startServer(port);
+// // Log for debugging
+// logger.info(
+//   `Main module check: mainPath=${mainModulePath}, currentPath=${currentFilePath}, isMain=${isMainModule}, isCloudEnv=${isCloudEnvironment}`,
+// );
 
-        // Handle graceful shutdown
-        const shutdown = (signal) => {
-          logger.info(`${signal} signal received: closing HTTP server`);
-          server.close(() => {
-            logger.info("HTTP server closed");
-            process.exit(0);
-          });
-        };
+// if (isMainModule) {
+//   const startServer = async (port) => {
+//     return new Promise((resolve, reject) => {
+//       const server = app.listen(port, () => {
+//         logger.info(`🚀 Server running on port ${port}`);
+//         logger.info(`📍 Health check: http://localhost:${port}/health`);
+//         logger.info(`📍 API info: http://localhost:${port}/api`);
+//         logger.info(`Environment: ${config.nodeEnv}`);
+//         resolve(server);
+//       });
 
-        process.on("SIGTERM", () => shutdown("SIGTERM"));
-        process.on("SIGINT", () => shutdown("SIGINT"));
+//       server.on("error", (error) => {
+//         if (error.code === "EADDRINUSE") {
+//           reject(error);
+//         } else {
+//           logger.error("❌ Server error:", error);
+//           reject(error);
+//         }
+//       });
+//     });
+//   };
 
-        return; // Successfully started
-      } catch (error) {
-        if (error.code === "EADDRINUSE") {
-          attempts++;
-          port = basePort + attempts;
-          logger.warn(`Port ${port - 1} is in use, trying port ${port}...`);
-        } else {
-          logger.error("Failed to start server:", error);
-          process.exit(1);
-        }
-      }
-    }
+//   const tryStartServer = async () => {
+//     const basePort = config.port || 3000;
+//     let port = basePort;
+//     let attempts = 0;
+//     const maxAttempts = 10;
 
-    logger.error(
-      `❌ Could not find an available port after ${maxAttempts} attempts.`,
-    );
-    process.exit(1);
-  };
+//     while (attempts < maxAttempts) {
+//       try {
+//         logger.info(`Attempting to start server on port ${port}...`);
+//         const server = await startServer(port);
 
-  tryStartServer().catch((error) => {
-    logger.error("Failed to start server:", error);
-    process.exit(1);
-  });
-} else {
-  if (isCloudEnvironment) {
-    logger.info("Server not started - running in Cloud Run environment");
-  } else {
-    logger.info("Server not started - imported as module");
-  }
-}
+//         // Handle graceful shutdown
+//         const shutdown = (signal) => {
+//           logger.info(`${signal} signal received: closing HTTP server`);
+//           server.close(() => {
+//             logger.info("HTTP server closed");
+//             process.exit(0);
+//           });
+//         };
+
+//         process.on("SIGTERM", () => shutdown("SIGTERM"));
+//         process.on("SIGINT", () => shutdown("SIGINT"));
+
+//         return; // Successfully started
+//       } catch (error) {
+//         if (error.code === "EADDRINUSE") {
+//           attempts++;
+//           port = basePort + attempts;
+//           logger.warn(`Port ${port - 1} is in use, trying port ${port}...`);
+//         } else {
+//           logger.error("Failed to start server:", error);
+//           process.exit(1);
+//         }
+//       }
+//     }
+
+//     logger.error(
+//       `❌ Could not find an available port after ${maxAttempts} attempts.`,
+//     );
+//     process.exit(1);
+//   };
+
+//   tryStartServer().catch((error) => {
+//     logger.error("Failed to start server:", error);
+//     process.exit(1);
+//   });
+// } else {
+//   if (isCloudEnvironment) {
+//     logger.info("Server not started - running in Cloud Run environment");
+//   } else {
+//     logger.info("Server not started - imported as module");
+//   }
+// }
