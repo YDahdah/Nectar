@@ -45,10 +45,44 @@ app.get("/", (req, res) => {
   });
 });
 
+const corsOrigins = [
+  "http://localhost:8080",
+  "https://perfumenectar.com",
+  "https://api.perfumenectar.com",
+];
+
+// Log CORS origins on startup
+console.log("🌐 CORS allowed origins:", corsOrigins);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Check if origin is in allowed list
+      if (corsOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`⚠️  CORS blocked origin: ${origin}`);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  }),
+);
+
 // CORS first so preflight (OPTIONS) always gets CORS headers before any other middleware
-app.use(corsMiddleware);
+// app.use(corsMiddleware);
 // Security middleware
-app.options("*", corsMiddleware);
+// app.options("*", corsMiddleware);
 app.use(helmetMiddleware);
 app.use(rateLimiter);
 app.use(requestSizeLimit("10mb"));
