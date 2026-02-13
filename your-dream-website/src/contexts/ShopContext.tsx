@@ -4,20 +4,32 @@ import { GenderFilter } from "@/components/ShopSidebar";
 interface ShopContextType {
   selectedGender: GenderFilter;
   setSelectedGender: (gender: GenderFilter) => void;
+  selectedBrand: string | null;
+  setSelectedBrand: (brand: string | null) => void;
 }
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
 export const ShopProvider = ({ children }: { children: ReactNode }) => {
   const [selectedGender, setSelectedGender] = useState<GenderFilter>("all");
+  const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
 
   const handleSetSelectedGender = useCallback((gender: GenderFilter) => {
     setSelectedGender(gender);
   }, []);
 
+  const handleSetSelectedBrand = useCallback((brand: string | null) => {
+    setSelectedBrand(brand);
+  }, []);
+
   const value = useMemo(
-    () => ({ selectedGender, setSelectedGender: handleSetSelectedGender }),
-    [selectedGender, handleSetSelectedGender]
+    () => ({ 
+      selectedGender, 
+      setSelectedGender: handleSetSelectedGender,
+      selectedBrand,
+      setSelectedBrand: handleSetSelectedBrand
+    }),
+    [selectedGender, handleSetSelectedGender, selectedBrand, handleSetSelectedBrand]
   );
 
   return (

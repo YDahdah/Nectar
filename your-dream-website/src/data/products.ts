@@ -679,13 +679,229 @@ export const getRelatedProducts = (currentProductId: string, limit: number = 2):
 // Get price based on size
 export const getPriceBySize = (size: string): number => {
   const sizeLower = size.toLowerCase();
-  if (sizeLower.includes("50ml")) {
+  // Check for VIP versions first (they contain both size and "vip")
+  if (sizeLower.includes("50ml") && sizeLower.includes("vip")) {
+    return 8.99;
+  } else if (sizeLower.includes("100ml") && sizeLower.includes("vip")) {
+    return 14.99;
+  } else if (sizeLower.includes("50ml")) {
     return 6.99;
   } else if (sizeLower.includes("100ml")) {
     return 10.99;
   }
   // Default fallback
   return 6.99;
+};
+
+// Extract brand from product name
+export const getBrandFromName = (productName: string): string => {
+  const name = productName.toUpperCase();
+  
+  // Common brand prefixes (ordered by specificity - longer names first)
+  const brandPatterns = [
+    "ACQUA DI GIO",
+    "TOM FORD",
+    "ARMANI CODE",
+    "ARMANI PRIVE",
+    "BOSS BOTTLED",
+    "BOSS THE SCENT",
+    "BOSS ORANGE",
+    "VERSACE",
+    "GUCCI",
+    "CHANEL",
+    "DIOR",
+    "DOLCE&GABBANA",
+    "D&G",
+    "PRADA",
+    "BURBERRY",
+    "HERMES",
+    "HERMÈS",
+    "GIVENCHY",
+    "YVES SAINT LAURENT",
+    "YSL",
+    "VALENTINO",
+    "MONT BLANC",
+    "MONTALE",
+    "CREED",
+    "PACO RABANNE",
+    "JEAN PAUL GAULTIER",
+    "JPG",
+    "CAROLINA HERRERA",
+    "HUGO BOSS",
+    "ISSEY MIYAKE",
+    "KENZO",
+    "LACOSTE",
+    "AZZARO",
+    "DAVIDOFF",
+    "RALPH LAUREN",
+    "RALPH",
+    "ROBERTO CAVALLI",
+    "NARCISO",
+    "ELIE SAAB",
+    "KAYALI",
+    "BVLGARI",
+    "JO MALONE",
+    "JOE MALONE",
+    "XERJOFF",
+    "MANCERA",
+    "PARFUMS DE MARLY",
+    "CARLISLE DE MARLY",
+    "LAYTON DE MARLY",
+    "CHOPARD",
+    "CARTIER",
+    "DUNHILL",
+    "NAUTICA",
+    "FERRARI",
+    "HUMMER",
+    "LEXUS",
+    "LANVIN",
+    "LAPIDUS",
+    "JAGUAR",
+    "JOOP",
+    "CACHAREL",
+    "BLUE JEANS",
+    "BLUE LABEL",
+    "CK",
+    "CKI",
+    "CK SHOCK",
+    "ETERNITY",
+    "PLEASURES",
+    "OBSESSION",
+    "ESCADA",
+    "RICCI",
+    "RICCI RICCI",
+    "Q D&G",
+    "212",
+    "BLACK XS",
+    "PURE XS",
+    "ONE MILLION",
+    "INVICTUS",
+    "LE MALE",
+    "ULTRA MALE",
+    "SPICE BOMB",
+    "SAUVAGE",
+    "TERRE D'HERMES",
+    "LA NUIT DE L'HOMME",
+    "L'HOMME",
+    "L'IMMENSITÉ",
+    "OMBRE",
+    "STRONGER WITH YOU",
+    "SWY",
+    "THE ONE",
+    "THE MOST WANTED",
+    "FAHRENHEIT",
+    "EAU SAUVAGE",
+    "EGOISTE",
+    "KOUROS",
+    "HABIT ROUGE",
+    "VÉTIVER",
+    "SAMSARA",
+    "MON GUERLAIN",
+    "L'INSTANT",
+    "SHALIMAR",
+    "ANGEL",
+    "ALIEN",
+    "GOOD GIRL",
+    "LIBRE",
+    "LA VIE EST BELLE",
+    "LA BELLE",
+    "IDÔLE",
+    "MY WAY",
+    "OLYMPÉA",
+    "SI",
+    "HYPNOSE",
+    "HYPNOTIC POISON",
+    "PURE POISON",
+    "TRESOR",
+    "POÊME",
+    "INSOLENCE",
+    "L'INTERDIT",
+    "L'EAU D'ISSEY",
+    "TWILLY",
+    "BACCARAT ROUGE",
+    "SANTAL",
+    "OUD",
+    "TOBACCO",
+    "VELVET",
+    "CALIFORNIA DREAM",
+    "STELLAR TIMES",
+    "LE LION",
+    "CAFTAN",
+    "ERBA PURA",
+    "MEGAMARE",
+    "AMORE CAFFE",
+    "AMBER SANTAL",
+    "ARABIANS TONKA",
+    "ROSE VANILLE",
+    "COCO VANILLE",
+    "BOIS",
+    "CRYSTAL",
+    "BLACK ORCHIDE",
+    "BLACK AFGANO",
+    "BLACK AOUDE",
+    "WITHE OUD",
+    "WESAL",
+    "TERIAQ",
+    "LATTAFA",
+    "RASASI",
+    "AJMAL",
+    "MATIERE PREMIERE",
+    "S.T. DUPONT",
+    "PARIS HILTON",
+    "BRITNEY SPEARS",
+    "MIDNIGHT FANTASY",
+    "CRAZY IN LOVE",
+    "LOVE ME MORE",
+    "LOVER DOSE",
+    "VERY SEXY NOW",
+    "VERY IRRESISTIBLE",
+    "FAME",
+    "FAR AWAY",
+    "GEORGINA'S SENSE",
+    "HAWAI",
+    "ICELAND",
+    "TODAY",
+    "PREMIER JOUR",
+    "SUPREME BOUQUET",
+    "LE BOUQUET ABSOLU",
+    "SCANDAL",
+    "SEXY GRAFITTI",
+    "SAHARA NOIR",
+    "TOSCA",
+    "MANIFESTO",
+    "MON PARIS",
+    "PRADA PARADOXE",
+    "MISS DIOR",
+    "J'ADORE",
+    "JOY",
+    "SUNSET NECTAR",
+  ];
+  
+  // Check for exact brand matches first (longer patterns first)
+  for (const brand of brandPatterns) {
+    if (name.startsWith(brand + " ") || name === brand) {
+      return brand;
+    }
+  }
+  
+  // Special handling for ACQUA DI GIO variants
+  if (name.includes("ACQUA DI GIO")) {
+    return "ACQUA DI GIO";
+  }
+  
+  // Return first word as fallback brand
+  const firstWord = name.split(" ")[0];
+  return firstWord || "OTHER";
+};
+
+// Get all unique brands from products
+export const getAllBrands = (): string[] => {
+  const brands = new Set<string>();
+  products.forEach((product) => {
+    const brand = getBrandFromName(product.name);
+    brands.add(brand);
+  });
+  return Array.from(brands).sort();
 };
 
 // Get featured/popular products for homepage

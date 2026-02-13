@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
-import { google } from 'google-auth-library';
+import pkg from 'google-auth-library';
+const { google } = pkg;
 import logger from '../utils/logger.js';
 
 /**

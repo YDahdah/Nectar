@@ -7,10 +7,10 @@ import { useCart } from "@/contexts/CartContext";
 import { getPriceBySize, getRelatedProducts } from "@/data/products";
 import ProductStructuredData from "@/components/ProductStructuredData";
 import BreadcrumbStructuredData from "@/components/BreadcrumbStructuredData";
-import image50ml from "@/assets/MEN/50ml.jpeg";
-import image50mlVip from "@/assets/MEN/5omlvip.jpeg";
+import image50ml from "@/assets/MEN/50ml.png";
+import image50mlVip from "@/assets/MEN/50mlvip.png";
 import image100ml from "@/assets/MEN/100ml.jpeg";
-import image100mlVip from "@/assets/MEN/100mLvip.jpeg";
+import image100mlVip from "@/assets/MEN/100mlvip.png";
 import {
   Breadcrumb,
   BreadcrumbList,

@@ -68,6 +68,8 @@ const ProductStructuredData = ({
     // Default price range based on sizes
     const prices = product.sizes?.map(size => {
       const sizeLower = size.toLowerCase();
+      if (sizeLower.includes("50ml") && sizeLower.includes("vip")) return 8.99;
+      if (sizeLower.includes("100ml") && sizeLower.includes("vip")) return 14.99;
       if (sizeLower.includes("50ml")) return 6.99;
       if (sizeLower.includes("100ml")) return 10.99;
       return 6.99;
@@ -96,7 +98,11 @@ const ProductStructuredData = ({
     return product.sizes.map(size => {
       const sizeLower = size.toLowerCase();
       let price = 6.99;
-      if (sizeLower.includes("100ml")) {
+      if (sizeLower.includes("50ml") && sizeLower.includes("vip")) {
+        price = 8.99;
+      } else if (sizeLower.includes("100ml") && sizeLower.includes("vip")) {
+        price = 14.99;
+      } else if (sizeLower.includes("100ml")) {
         price = 10.99;
       }
       

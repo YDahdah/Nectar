@@ -10,6 +10,7 @@ import MetaTags from "@/components/MetaTags";
 import { motion } from "framer-motion";
 import { products } from "@/data/products";
 import { useShop } from "@/contexts/ShopContext";
+import { getBrandFromName } from "@/data/products";
 
 // Fisher-Yates shuffle algorithm for randomizing array
 const shuffleArray = <T,>(array: T[]): T[] => {
@@ -25,19 +26,30 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 let cachedShuffledProducts: typeof products | null = null;
 
 const Shop = () => {
-  const { selectedGender, setSelectedGender } = useShop();
+  const { selectedGender, setSelectedGender, selectedBrand, setSelectedBrand } = useShop();
   const [isLoading, setIsLoading] = useState(false);
 
   const filteredProducts = useMemo(() => {
-    if (selectedGender === "all") {
-      // Use cached shuffled products to avoid re-shuffling
+    let filtered = products;
+    
+    // Filter by gender
+    if (selectedGender !== "all") {
+      filtered = filtered.filter((product) => product.gender === selectedGender);
+    }
+    
+    // Filter by brand
+    if (selectedBrand) {
+      filtered = filtered.filter((product) => getBrandFromName(product.name) === selectedBrand);
+    } else if (selectedGender === "all" && !selectedBrand) {
+      // Use cached shuffled products only when no filters are applied
       if (!cachedShuffledProducts) {
         cachedShuffledProducts = shuffleArray(products);
       }
       return cachedShuffledProducts;
     }
-    return products.filter((product) => product.gender === selectedGender);
-  }, [selectedGender]);
+    
+    return filtered;
+  }, [selectedGender, selectedBrand]);
 
   // Simulate loading state when filter changes
   useEffect(() => {
@@ -46,7 +58,7 @@ const Shop = () => {
       setIsLoading(false);
     }, 300); // Short delay for smooth transition
     return () => clearTimeout(timer);
-  }, [selectedGender]);
+  }, [selectedGender, selectedBrand]);
 
   const pageTitle = useMemo(() => {
     const genderText = selectedGender === "all" 
@@ -124,6 +136,8 @@ const Shop = () => {
               <ShopSidebar
                 selectedGender={selectedGender}
                 onGenderChange={setSelectedGender}
+                selectedBrand={selectedBrand}
+                onBrandChange={setSelectedBrand}
               />
 
               {/* Products Grid */}
