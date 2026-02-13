@@ -1,9 +1,13 @@
 
-// Backend API URL – set VITE_API_URL in .env for local override
+// Backend API URL
+// In production: uses the full URL. In local dev: empty string so requests
+// go to the same origin and Vite's proxy forwards them to the real backend.
 export const API_BASE =
   typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL
     ? (import.meta.env.VITE_API_URL as string).replace(/\/$/, "")
-    : "https://api.perfumenectar.com";
+    : import.meta.env?.DEV
+      ? ""  // Local dev: use Vite proxy (relative /api/... paths)
+      : "https://api.perfumenectar.com"; // Production build
 
 // Cloud Function URL for order processing
 export const CLOUD_FUNCTION_URL =

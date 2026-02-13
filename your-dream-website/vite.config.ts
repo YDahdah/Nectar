@@ -18,6 +18,14 @@ export default defineConfig(({ mode }) => ({
       strict: true,
       allow: ['..'],
     },
+    // Proxy API requests to production backend (avoids CORS in local dev)
+    proxy: {
+      '/api': {
+        target: 'https://api.perfumenectar.com',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
   plugins: [
     react({
