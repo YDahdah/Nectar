@@ -1,0 +1,8 @@
+# Python dependencies for Nectar2 project
+# This file is for any Python scripts or tools used in the project
+# Currently, this project uses Node.js (see package.json files)
+
+# Add Python dependencies here if needed
+# Example:
+# requests==2.31.0
+# python-dotenv==1.0.0
