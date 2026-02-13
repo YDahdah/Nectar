@@ -5,7 +5,7 @@ import { dirname } from "path";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
 import {
-  corsMiddleware,
+  // corsMiddleware,
   helmetMiddleware,
   rateLimiter,
   requestSizeLimit,
@@ -17,6 +17,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import emailRoutes from "./routes/emailRoutes.js";
+import cors from "cors";
 
 const app = express();
 
