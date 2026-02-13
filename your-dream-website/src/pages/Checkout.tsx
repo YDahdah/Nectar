@@ -135,8 +135,7 @@ const Checkout = () => {
         shippingMethod: "Delivery (2-3 Working Days)",
       };
 
-      // Use Cloud Function URL if available, otherwise fallback to API_BASE
-      // Cloud Function URL should be the full endpoint: https://REGION-PROJECT.cloudfunctions.net/createOrder
+      
       const orderEndpoint = CLOUD_FUNCTION_URL 
         ? CLOUD_FUNCTION_URL
         : `${API_BASE}/api/orders/checkout`;

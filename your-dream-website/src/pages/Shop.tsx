@@ -128,20 +128,20 @@ const Shop = () => {
           </div>
         </section>
 
-        {/* Main Content with Sidebar */}
+        {/* Filters + Products */}
         <section className="pb-16 sm:pb-24 lg:pb-32">
           <div className="container mx-auto px-4 sm:px-6 lg:px-12">
-            <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-              {/* Sidebar */}
+            <div className="mb-6 sm:mb-8">
               <ShopSidebar
                 selectedGender={selectedGender}
                 onGenderChange={setSelectedGender}
                 selectedBrand={selectedBrand}
                 onBrandChange={setSelectedBrand}
               />
+            </div>
 
-              {/* Products Grid */}
-              <div className="flex-1 min-w-0">
+            {/* Products Grid */}
+            <div className="flex-1 min-w-0">
                 {isLoading ? (
                   <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 xl:gap-10">
                     {Array.from({ length: 8 }).map((_, index) => (
@@ -165,7 +165,6 @@ const Shop = () => {
                     </p>
                   </div>
                 )}
-              </div>
             </div>
           </div>
         </section>

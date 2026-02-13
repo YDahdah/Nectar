@@ -52,9 +52,6 @@ function validateEnv() {
   }
 }
 
-/**
- * Application configuration
- */
 const config = {
   // Server
   port: parseInt(process.env.PORT || '3000', 10),
@@ -74,18 +71,22 @@ const config = {
   // Owner
   ownerPhone: process.env.OWNER_PHONE || '+96181353685',
   
-  // Security
+  // Security – allowed frontend origins (sites that can call this API)
   security: {
-    corsOrigins: process.env.CORS_ORIGINS 
+    corsOrigins: process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
-      : ['http://localhost:5173', 'http://localhost:8080', 'http://localhost:3000'],
-    apiKey: process.env.API_KEY, // Optional API key for admin endpoints
-    rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW || '15', 10) * 60 * 1000, // 15 minutes
-    rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10) // 100 requests per window
+      : [
+          'http://localhost:5173',
+          'http://localhost:8080',
+          'http://localhost:3000',
+          'https://perfumenectar.com',
+          'https://www.perfumenectar.com',
+        ],
+    apiKey: process.env.API_KEY,
+    rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW || '15', 10) * 60 * 1000,
+    rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10) 
   }
 };
-
-// Validate environment on load
 validateEnv();
 
 export default config;
