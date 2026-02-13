@@ -5,13 +5,15 @@ import config from '../config/config.js';
 import logger from '../utils/logger.js';
 
 /**
- * CORS configuration – allow all origins
+ * CORS configuration – allow all origins (required for browser requests from other origins).
+ * If you use nginx in front of this app, proxy /api and /health to Node so this middleware can add CORS headers.
  */
 export const corsMiddleware = cors({
-  origin: true,
+  origin: true, // reflect request Origin (e.g. http://localhost:8080 or https://perfumenectar.com)
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+  optionsSuccessStatus: 204, // some clients expect 204 for OPTIONS
 });
 
 /**

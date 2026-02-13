@@ -45,9 +45,10 @@ app.get('/', (req, res) => {
   });
 });
 
+// CORS first so preflight (OPTIONS) always gets CORS headers before any other middleware
+app.use(corsMiddleware);
 // Security middleware
 app.use(helmetMiddleware);
-app.use(corsMiddleware);
 app.use(rateLimiter);
 app.use(requestSizeLimit('10mb'));
 

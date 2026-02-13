@@ -135,8 +135,8 @@ const Checkout = () => {
         shippingMethod: "Delivery (2-3 Working Days)",
       };
 
-      
-      const orderEndpoint = CLOUD_FUNCTION_URL 
+
+      const orderEndpoint = CLOUD_FUNCTION_URL
         ? CLOUD_FUNCTION_URL
         : `${API_BASE}/api/orders/checkout`;
 
@@ -156,15 +156,25 @@ const Checkout = () => {
         throw new Error(errorMsg);
       }
 
-      let result: { orderId?: string; error?: string; success?: boolean; message?: string };
-      try {
-        result = await response.json();
-      } catch {
-        throw new Error("Invalid response from server. Please try again.");
+      const contentType = response.headers.get("content-type") ?? "";
+      const isJson = contentType.includes("application/json");
+      let result: { orderId?: string; error?: string; success?: boolean; message?: string } = {};
+      if (isJson) {
+        try {
+          result = await response.json();
+        } catch {
+          throw new Error("Invalid response from server. Please try again.");
+        }
       }
 
       if (!response.ok) {
-        throw new Error(result.error || result.message || "Failed to place order");
+        if (response.status === 404) {
+          throw new Error(
+            "Checkout endpoint not found. If using local dev, start the backend (cd server && npm start) and set VITE_PROXY_TARGET=http://localhost:3000 in .env."
+          );
+        }
+        const msg = result?.error || result?.message || (response.status === 502 ? "Backend unavailable. Is the server running?" : "Failed to place order");
+        throw new Error(msg);
       }
 
       // Handle Cloud Function response format
@@ -221,9 +231,9 @@ const Checkout = () => {
             <div className="flex items-center gap-3">
               <div className="flex flex-col items-center">
                 {/* NECTAR - bold sans-serif, dark grey */}
-                <span 
+                <span
                   className="text-xl font-bold uppercase"
-                  style={{ 
+                  style={{
                     fontFamily: "Inter, system-ui, -apple-system, sans-serif",
                     lineHeight: "1.2",
                     fontWeight: 700,
@@ -232,7 +242,7 @@ const Checkout = () => {
                 >
                   NECTAR
                 </span>
-                
+
                 {/* perfume - cursive, golden, centered under NECTAR */}
                 <span
                   className="text-base lowercase"
@@ -278,9 +288,8 @@ const Checkout = () => {
                   className={`flex items-center gap-2 text-sm ${step >= s.id ? "text-foreground font-medium" : "text-muted-foreground"}`}
                 >
                   <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-full border ${
-                      step > s.id ? "border-accent bg-accent text-accent-foreground" : step === s.id ? "border-accent bg-background" : "border-border"
-                    }`}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border ${step > s.id ? "border-accent bg-accent text-accent-foreground" : step === s.id ? "border-accent bg-background" : "border-border"
+                      }`}
                     aria-current={step === s.id ? "step" : undefined}
                   >
                     {step > s.id ? <Check className="h-4 w-4" /> : s.id}
@@ -295,31 +304,30 @@ const Checkout = () => {
           </nav>
 
           <div className="space-y-8">
-              {/* Order Summary (Collapsible on step 1–2, expanded on step 3) */}
-              <div className="bg-card rounded-md p-6 border border-border">
-                <button
-                  type="button"
-                  onClick={() => step !== 3 && setOrderSummaryOpen(!orderSummaryOpen)}
-                  className="w-full flex items-center justify-between mb-4 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  aria-expanded={orderSummaryOpen || step === 3}
-                  aria-controls="order-summary-content"
-                  disabled={step === 3}
-                >
-                  <h2 className="text-base font-normal text-card-foreground">Order summary</h2>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold text-card-foreground">
-                      ${totalWithShipping.toFixed(2)}
-                    </span>
-                    <ChevronDown
-                      className={`w-4 h-4 text-card-foreground transition-transform ${
-                        orderSummaryOpen ? "rotate-180" : ""
+            {/* Order Summary (Collapsible on step 1–2, expanded on step 3) */}
+            <div className="bg-card rounded-md p-6 border border-border">
+              <button
+                type="button"
+                onClick={() => step !== 3 && setOrderSummaryOpen(!orderSummaryOpen)}
+                className="w-full flex items-center justify-between mb-4 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                aria-expanded={orderSummaryOpen || step === 3}
+                aria-controls="order-summary-content"
+                disabled={step === 3}
+              >
+                <h2 className="text-base font-normal text-card-foreground">Order summary</h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-card-foreground">
+                    ${totalWithShipping.toFixed(2)}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-card-foreground transition-transform ${orderSummaryOpen ? "rotate-180" : ""
                       }`}
-                      aria-hidden
-                    />
-                  </div>
-                </button>
+                    aria-hidden
+                  />
+                </div>
+              </button>
 
-                <div id="order-summary-content" role="region" aria-label="Order summary details">
+              <div id="order-summary-content" role="region" aria-label="Order summary details">
                 {(orderSummaryOpen || step === 3) && (
                   <div className="space-y-4 pt-4 border-t border-border">
                     {/* Product Details */}
@@ -372,11 +380,11 @@ const Checkout = () => {
                     </div>
                   </div>
                 )}
-                </div>
               </div>
+            </div>
 
-              {/* Step 1: Delivery */}
-              {step === 1 && (
+            {/* Step 1: Delivery */}
+            {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-base font-normal text-card-foreground">Delivery</h2>
 
@@ -411,9 +419,8 @@ const Checkout = () => {
                       placeholder="First name"
                       value={formData.firstName}
                       onChange={(e) => handleInputChange("firstName", e.target.value)}
-                      className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                        formErrors.firstName ? "border-red-500" : ""
-                      }`}
+                      className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.firstName ? "border-red-500" : ""
+                        }`}
                       aria-describedby={formErrors.firstName ? "firstName-error" : undefined}
                       aria-invalid={!!formErrors.firstName}
                     />
@@ -433,9 +440,8 @@ const Checkout = () => {
                       placeholder="Last name"
                       value={formData.lastName}
                       onChange={(e) => handleInputChange("lastName", e.target.value)}
-                      className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                        formErrors.lastName ? "border-red-500" : ""
-                      }`}
+                      className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.lastName ? "border-red-500" : ""
+                        }`}
                       aria-describedby={formErrors.lastName ? "lastName-error" : undefined}
                       aria-invalid={!!formErrors.lastName}
                     />
@@ -457,9 +463,8 @@ const Checkout = () => {
                     placeholder="Address"
                     value={formData.address}
                     onChange={(e) => handleInputChange("address", e.target.value)}
-                    className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                      formErrors.address ? "border-red-500" : ""
-                    }`}
+                    className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.address ? "border-red-500" : ""
+                      }`}
                     aria-describedby={formErrors.address ? "address-error" : undefined}
                     aria-invalid={!!formErrors.address}
                   />
@@ -481,9 +486,8 @@ const Checkout = () => {
                       placeholder="City"
                       value={formData.city}
                       onChange={(e) => handleInputChange("city", e.target.value)}
-                      className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                        formErrors.city ? "border-red-500" : ""
-                      }`}
+                      className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.city ? "border-red-500" : ""
+                        }`}
                     />
                     {formErrors.city && (
                       <p id="city-error" className="text-sm text-red-500" role="alert">
@@ -501,9 +505,8 @@ const Checkout = () => {
                     >
                       <SelectTrigger
                         id="caza"
-                        className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                          formErrors.caza ? "border-red-500" : ""
-                        }`}
+                        className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.caza ? "border-red-500" : ""
+                          }`}
                         aria-describedby={formErrors.caza ? "caza-error" : undefined}
                         aria-invalid={!!formErrors.caza}
                       >
@@ -540,16 +543,15 @@ const Checkout = () => {
                       handleInputChange("phone", value);
                     }}
                     maxLength={15}
-                    className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                      formErrors.phone ? "border-red-500" : ""
-                    }`}
+                    className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.phone ? "border-red-500" : ""
+                      }`}
                     aria-describedby={formErrors.phone ? "phone-error" : undefined}
                   />
-                    {formErrors.phone && (
-                      <p id="phone-error" className="text-sm text-red-500" role="alert">
-                        {formErrors.phone}
-                      </p>
-                    )}
+                  {formErrors.phone && (
+                    <p id="phone-error" className="text-sm text-red-500" role="alert">
+                      {formErrors.phone}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -562,9 +564,8 @@ const Checkout = () => {
                     placeholder="Email"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`w-full h-12 rounded-md border-gray-300 bg-white ${
-                      formErrors.email ? "border-red-500" : ""
-                    }`}
+                    className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.email ? "border-red-500" : ""
+                      }`}
                     aria-describedby={formErrors.email ? "email-error" : undefined}
                     aria-invalid={!!formErrors.email}
                   />
@@ -575,9 +576,9 @@ const Checkout = () => {
                   )}
                 </div>
               </div>
-              )}
+            )}
 
-              {step === 1 && (
+            {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-base font-normal text-card-foreground">Shipping method</h2>
                 <div className="border border-border rounded-md p-4 flex items-center justify-between bg-card">
@@ -585,10 +586,10 @@ const Checkout = () => {
                   <span className="text-sm font-normal text-card-foreground">${shippingCost.toFixed(2)}</span>
                 </div>
               </div>
-              )}
+            )}
 
-              {/* Step 2: Payment */}
-              {step === 2 && (
+            {/* Step 2: Payment */}
+            {step === 2 && (
               <div className="space-y-4">
                 <h2 className="text-base font-normal text-card-foreground">Payment</h2>
                 <p className="text-sm text-muted-foreground">All transactions are secure and encrypted.</p>
@@ -601,10 +602,10 @@ const Checkout = () => {
                   </div>
                 </RadioGroup>
               </div>
-              )}
+            )}
 
-              {/* Step 3: Review */}
-              {step === 3 && (
+            {/* Step 3: Review */}
+            {step === 3 && (
               <div className="space-y-4">
                 <h2 className="text-base font-normal text-card-foreground">Review your order</h2>
                 <div className="bg-muted/30 rounded-md p-4 space-y-2 text-xs sm:text-sm break-words">
@@ -613,48 +614,48 @@ const Checkout = () => {
                   <p><span className="text-muted-foreground">Payment:</span> Cash on Delivery (COD)</p>
                 </div>
               </div>
-              )}
+            )}
 
-              {/* Step navigation & Submit */}
-              <div className="pt-8 flex flex-col sm:flex-row gap-3">
-                {step > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={goToPrevStep}
-                    className="flex-1 h-12 border-gray-300 rounded-md"
-                  >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back
-                  </Button>
-                ) : null}
-                {step < 3 ? (
-                  <Button
-                    type="button"
-                    onClick={goToNextStep}
-                    className="flex-1 h-12 bg-black text-white hover:bg-gray-900 rounded-md"
-                  >
-                    Next: {STEPS[step].label}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex-1 h-12 bg-black text-white hover:bg-gray-900 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing order...
-                      </>
-                    ) : (
-                      "Complete order"
-                    )}
-                  </Button>
-                )}
-              </div>
+            {/* Step navigation & Submit */}
+            <div className="pt-8 flex flex-col sm:flex-row gap-3">
+              {step > 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={goToPrevStep}
+                  className="flex-1 h-12 border-gray-300 rounded-md"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+              ) : null}
+              {step < 3 ? (
+                <Button
+                  type="button"
+                  onClick={goToNextStep}
+                  className="flex-1 h-12 bg-black text-white hover:bg-gray-900 rounded-md"
+                >
+                  Next: {STEPS[step].label}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 h-12 bg-black text-white hover:bg-gray-900 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing order...
+                    </>
+                  ) : (
+                    "Complete order"
+                  )}
+                </Button>
+              )}
             </div>
+          </div>
         </form>
       </main>
       <Footer />

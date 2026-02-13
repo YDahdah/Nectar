@@ -18,12 +18,12 @@ export default defineConfig(({ mode }) => ({
       strict: true,
       allow: ['..'],
     },
-    // Proxy API requests to production backend (avoids CORS in local dev)
+    // Proxy API requests in dev. Set VITE_PROXY_TARGET to use local backend (e.g. http://localhost:3000).
     proxy: {
       '/api': {
-        target: 'https://api.perfumenectar.com',
+        target: process.env.VITE_PROXY_TARGET || 'https://api.perfumenectar.com',
         changeOrigin: true,
-        secure: true,
+        secure: process.env.VITE_PROXY_TARGET?.startsWith('https') !== true,
       },
     },
   },
