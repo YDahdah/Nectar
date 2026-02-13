@@ -1,20 +1,14 @@
-import helmet from 'helmet';
-import cors from 'cors';
-import rateLimit from 'express-rate-limit';
-import config from '../config/config.js';
-import logger from '../utils/logger.js';
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
+import config from "../config/config.js";
+import logger from "../utils/logger.js";
 
 /**
  * CORS configuration – allow all origins (required for browser requests from other origins).
  * If you use nginx in front of this app, proxy /api and /health to Node so this middleware can add CORS headers.
  */
-export const corsMiddleware = cors({
-  origin: true, // reflect request Origin (e.g. http://localhost:8080 or https://perfumenectar.com)
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
-  optionsSuccessStatus: 204, // some clients expect 204 for OPTIONS
-});
+export const corsMiddleware = cors();
 
 /**
  * Rate limiting middleware
@@ -24,7 +18,7 @@ export const rateLimiter = rateLimit({
   max: config.security.rateLimitMax,
   message: {
     success: false,
-    error: 'Too many requests from this IP, please try again later.'
+    error: "Too many requests from this IP, please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -32,9 +26,9 @@ export const rateLimiter = rateLimit({
     logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
       success: false,
-      error: 'Too many requests from this IP, please try again later.'
+      error: "Too many requests from this IP, please try again later.",
     });
-  }
+  },
 });
 
 /**
@@ -45,7 +39,7 @@ export const checkoutRateLimiter = rateLimit({
   max: 5, // 5 orders per 15 minutes
   message: {
     success: false,
-    error: 'Too many checkout attempts. Please wait before trying again.'
+    error: "Too many checkout attempts. Please wait before trying again.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -53,9 +47,9 @@ export const checkoutRateLimiter = rateLimit({
     logger.warn(`Checkout rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
       success: false,
-      error: 'Too many checkout attempts. Please wait before trying again.'
+      error: "Too many checkout attempts. Please wait before trying again.",
     });
-  }
+  },
 });
 
 /**
@@ -66,7 +60,7 @@ export const newsletterRateLimiter = rateLimit({
   max: 10, // 10 signups per 15 minutes per IP
   message: {
     success: false,
-    error: 'Too many signup attempts. Please try again later.'
+    error: "Too many signup attempts. Please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -74,9 +68,9 @@ export const newsletterRateLimiter = rateLimit({
     logger.warn(`Newsletter rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
       success: false,
-      error: 'Too many signup attempts. Please try again later.'
+      error: "Too many signup attempts. Please try again later.",
     });
-  }
+  },
 });
 
 /**
@@ -91,24 +85,26 @@ export const helmetMiddleware = helmet({
       imgSrc: ["'self'", "data:", "https:"],
     },
   },
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
 });
 
 /**
  * Request size limit middleware
  */
-export function requestSizeLimit(maxSize = '10mb') {
+export function requestSizeLimit(maxSize = "10mb") {
   return (req, res, next) => {
-    const contentLength = req.get('content-length');
+    const contentLength = req.get("content-length");
     if (contentLength) {
       const sizeInMB = parseInt(contentLength) / (1024 * 1024);
       const maxSizeInMB = parseFloat(maxSize);
-      
+
       if (sizeInMB > maxSizeInMB) {
-        logger.warn(`Request too large from IP: ${req.ip}, Size: ${sizeInMB.toFixed(2)}MB`);
+        logger.warn(
+          `Request too large from IP: ${req.ip}, Size: ${sizeInMB.toFixed(2)}MB`,
+        );
         return res.status(413).json({
           success: false,
-          error: `Request payload too large. Maximum size is ${maxSize}`
+          error: `Request payload too large. Maximum size is ${maxSize}`,
         });
       }
     }
