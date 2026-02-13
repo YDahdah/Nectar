@@ -1,0 +1,46 @@
+type User @table {
+  displayName: String!
+  email: String!
+  createdAt: Timestamp!
+  passwordHash: String
+  isAdmin: Boolean
+}
+
+type Perfume @table {
+  name: String!
+  brand: String!
+  price: Float!
+  stockQuantity: Int!
+  createdAt: Timestamp!
+  description: String
+  scentNotes: String
+  imageUrl: String
+}
+
+type Cart @table {
+  user: User!
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+}
+
+type CartItem @table {
+  cart: Cart!
+  perfume: Perfume!
+  quantity: Int!
+}
+
+type Order @table {
+  user: User!
+  orderDate: Timestamp!
+  totalAmount: Float!
+  status: String!
+  createdAt: Timestamp!
+  shippingAddress: String
+}
+
+type OrderItem @table {
+  order: Order!
+  perfume: Perfume!
+  quantity: Int!
+  unitPriceAtTimeOfOrder: Float!
+}

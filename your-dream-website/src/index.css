@@ -1,0 +1,217 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600&family=Dancing+Script:wght@400;500;600;700&display=swap');
+
+/* Optimize font loading */
+@font-face {
+  font-family: 'Playfair Display';
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Dancing Script';
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Accessibility: Screen reader only class */
+@layer utilities {
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  /* Enhanced focus styles for better visibility */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--accent));
+    outline-offset: 2px;
+  }
+
+  /* Hide scrollbar while allowing scroll (e.g. horizontal filter strip) */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* NECTAR Luxury Perfume Design System */
+
+@layer base {
+  :root {
+    /* Warm cream background */
+    --background: 40 33% 97%;
+    --foreground: 30 10% 15%;
+
+    /* Card surfaces */
+    --card: 40 25% 96%;
+    --card-foreground: 30 10% 15%;
+
+    /* Popover */
+    --popover: 40 33% 97%;
+    --popover-foreground: 30 10% 15%;
+
+    /* Primary - Dark charcoal/brown for buttons */
+    --primary: 30 8% 15%;
+    --primary-foreground: 40 33% 97%;
+
+    /* Secondary - Light beige */
+    --secondary: 38 30% 92%;
+    --secondary-foreground: 30 10% 15%;
+
+    /* Muted tones */
+    --muted: 35 20% 90%;
+    --muted-foreground: 30 8% 45%;
+
+    /* Accent - gold-like (matches homepage hero) */
+    --accent: 40 61% 56%;
+    --accent-foreground: 30 10% 15%;
+
+    /* Golden highlight for special text */
+    --gold: 40 61% 56%;
+    --gold-light: 42 55% 70%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 40 33% 97%;
+
+    --border: 35 25% 88%;
+    --input: 35 25% 88%;
+    --ring: 40 61% 56%;
+
+    --radius: 0.25rem;
+
+    /* Sidebar */
+    --sidebar-background: 40 33% 97%;
+    --sidebar-foreground: 30 10% 25%;
+    --sidebar-primary: 30 8% 15%;
+    --sidebar-primary-foreground: 40 33% 97%;
+    --sidebar-accent: 38 30% 92%;
+    --sidebar-accent-foreground: 30 10% 15%;
+    --sidebar-border: 35 25% 88%;
+    --sidebar-ring: 38 65% 55%;
+  }
+
+  .dark {
+    --background: 30 10% 8%;
+    --foreground: 40 20% 95%;
+
+    --card: 30 10% 10%;
+    --card-foreground: 40 20% 95%;
+
+    --popover: 30 10% 8%;
+    --popover-foreground: 40 20% 95%;
+
+    --primary: 40 20% 95%;
+    --primary-foreground: 30 10% 8%;
+
+    --secondary: 30 10% 15%;
+    --secondary-foreground: 40 20% 95%;
+
+    --muted: 30 10% 18%;
+    --muted-foreground: 35 15% 60%;
+
+    --accent: 40 61% 52%;
+    --accent-foreground: 30 10% 8%;
+
+    --gold: 38 65% 50%;
+    --gold-light: 40 55% 65%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 40 20% 95%;
+
+    --border: 30 10% 18%;
+    --input: 30 10% 18%;
+    --ring: 40 61% 52%;
+
+    --sidebar-background: 30 10% 10%;
+    --sidebar-foreground: 40 15% 90%;
+    --sidebar-primary: 38 60% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 8% 15%;
+    --sidebar-accent-foreground: 40 15% 90%;
+    --sidebar-border: 30 8% 15%;
+    --sidebar-ring: 38 65% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Smooth page transitions */
+  @media (prefers-reduced-motion: no-preference) {
+    * {
+      scroll-behavior: smooth;
+    }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif;
+  }
+}
+
+@layer components {
+  .heading-hero {
+    @apply font-serif italic text-5xl md:text-6xl lg:text-7xl font-medium leading-tight tracking-tight;
+  }
+
+  .heading-accent {
+    @apply text-accent;
+  }
+
+  .text-gold {
+    color: hsl(var(--gold));
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground px-8 py-4 rounded-full font-medium tracking-wide transition-all duration-300 hover:opacity-90;
+  }
+
+  .btn-outline {
+    @apply border border-primary text-foreground px-8 py-4 rounded-full font-medium tracking-wide transition-all duration-300 hover:bg-primary hover:text-primary-foreground;
+  }
+
+  .label-tag {
+    @apply uppercase text-xs tracking-[0.2em] font-medium text-accent;
+  }
+
+  .product-card {
+    @apply bg-card rounded-sm overflow-hidden transition-all duration-300 hover:shadow-lg;
+  }
+}
