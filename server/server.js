@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import morgan from "morgan";
 import { fileURLToPath } from "url";
@@ -5,7 +7,7 @@ import { dirname } from "path";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
 import {
-  // corsMiddleware,
+  
   helmetMiddleware,
   rateLimiter,
   requestSizeLimit,
