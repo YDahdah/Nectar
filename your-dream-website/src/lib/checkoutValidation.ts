@@ -41,9 +41,7 @@ export function validateDeliveryFields(
       errors.phone = "Please enter a valid phone number";
     }
   }
-  if (!data.email.trim()) {
-    errors.email = "Email is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+  if (data.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
     errors.email = "Please enter a valid email address";
   }
 

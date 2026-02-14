@@ -17,6 +17,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import emailRoutes from "./routes/emailRoutes.js";
+import productRoutes from "./routes/productRoutes.js";
 import cors from "cors";
 
 const app = express();
@@ -114,6 +115,7 @@ app.get("/api", (req, res) => {
     endpoints: {
       health: "/health",
       orders: "/api/orders",
+      products: "/api/products",
       newsletter: "/api/newsletter",
       test: "/api/test",
       email: "/api/send-email",
@@ -136,6 +138,7 @@ app.get("/health/detailed", (req, res) => {
 
 // API routes
 app.use("/api/orders", orderRoutes);
+app.use("/api/products", productRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api", emailRoutes);

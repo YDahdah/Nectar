@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ShoppingBag, Check } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
-import { getPriceBySize } from "@/data/products";
+import { getPriceBySize } from "@/api/products";
 import { prefetchProduct } from "@/prefetch";
 import OptimizedImage from "./OptimizedImage";
 import { getImageUrl } from "@/lib/config";

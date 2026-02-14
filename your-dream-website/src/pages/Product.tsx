@@ -5,7 +5,7 @@ import ProductDetail from "@/components/ProductDetail";
 import ProductDetailSkeleton from "@/components/ProductDetailSkeleton";
 import Footer from "@/components/Footer";
 import MetaTags from "@/components/MetaTags";
-import { getProductById } from "@/data/products";
+import { getProductById } from "@/api/products";
 
 const Product = () => {
   const { id } = useParams<{ id: string }>();

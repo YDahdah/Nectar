@@ -1,4 +1,4 @@
-import { useMemo, memo, useState, useEffect } from "react";
+import { useMemo, memo, useState, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
@@ -8,9 +8,10 @@ import SkipLink from "@/components/SkipLink";
 import ItemListStructuredData from "@/components/ItemListStructuredData";
 import MetaTags from "@/components/MetaTags";
 import { motion } from "framer-motion";
-import { products } from "@/data/products";
 import { useShop } from "@/contexts/ShopContext";
-import { getBrandFromName } from "@/data/products";
+import { getProductList, getBrandFromName, type Product } from "@/api/products";
+import { SHOP_PAGE_SIZE } from "@/constants";
+import { Button } from "@/components/ui/button";
 
 // Fisher-Yates shuffle algorithm for randomizing array
 const shuffleArray = <T,>(array: T[]): T[] => {
@@ -23,32 +24,30 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 };
 
 // Cache shuffled products to avoid re-shuffling on every render
-let cachedShuffledProducts: typeof products | null = null;
+let cachedShuffledProducts: Product[] | null = null;
 
 const Shop = () => {
   const { selectedGender, setSelectedGender, selectedBrand, setSelectedBrand } = useShop();
   const [isLoading, setIsLoading] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(SHOP_PAGE_SIZE);
 
   const filteredProducts = useMemo(() => {
-    let filtered = products;
-    
-    // Filter by gender
-    if (selectedGender !== "all") {
-      filtered = filtered.filter((product) => product.gender === selectedGender);
-    }
-    
-    // Filter by brand
-    if (selectedBrand) {
-      filtered = filtered.filter((product) => getBrandFromName(product.name) === selectedBrand);
-    } else if (selectedGender === "all" && !selectedBrand) {
-      // Use cached shuffled products only when no filters are applied
+    const { products: list } = getProductList({
+      gender: selectedGender,
+      brand: selectedBrand,
+    });
+    if (selectedGender === "all" && !selectedBrand) {
       if (!cachedShuffledProducts) {
-        cachedShuffledProducts = shuffleArray(products);
+        cachedShuffledProducts = shuffleArray(list);
       }
       return cachedShuffledProducts;
     }
-    
-    return filtered;
+    return list;
+  }, [selectedGender, selectedBrand]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(SHOP_PAGE_SIZE);
   }, [selectedGender, selectedBrand]);
 
   // Simulate loading state when filter changes
@@ -59,6 +58,15 @@ const Shop = () => {
     }, 300); // Short delay for smooth transition
     return () => clearTimeout(timer);
   }, [selectedGender, selectedBrand]);
+
+  const productsToShow = useMemo(
+    () => filteredProducts.slice(0, visibleCount),
+    [filteredProducts, visibleCount]
+  );
+  const hasMore = filteredProducts.length > visibleCount;
+  const loadMore = useCallback(() => {
+    setVisibleCount((prev) => prev + SHOP_PAGE_SIZE);
+  }, []);
 
   const pageTitle = useMemo(() => {
     const genderText = selectedGender === "all" 
@@ -149,15 +157,29 @@ const Shop = () => {
                     ))}
                   </div>
                 ) : filteredProducts.length > 0 ? (
-                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 xl:gap-10">
-                    {filteredProducts.map((product, index) => (
-                      <ProductCard 
-                        key={product.id} 
-                        {...product} 
-                        index={index}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 xl:gap-10">
+                      {productsToShow.map((product, index) => (
+                        <ProductCard
+                          key={product.id}
+                          {...product}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                    {hasMore && (
+                      <div className="mt-10 flex justify-center">
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          onClick={loadMore}
+                          className="min-w-[200px]"
+                        >
+                          Load more ({filteredProducts.length - visibleCount} left)
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="text-center py-20">
                     <p className="text-muted-foreground text-lg">

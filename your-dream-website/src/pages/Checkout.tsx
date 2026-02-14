@@ -556,12 +556,12 @@ const Checkout = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm text-card-foreground">
-                    Email
+                    Email <span className="text-muted-foreground font-normal">(optional)</span>
                   </Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="Email"
+                    placeholder="Email (optional)"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
                     className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.email ? "border-red-500" : ""

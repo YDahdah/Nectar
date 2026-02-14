@@ -4,7 +4,7 @@ import { ArrowRight, Plus, Minus, Share2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/contexts/CartContext";
-import { getPriceBySize, getRelatedProducts } from "@/data/products";
+import { getPriceBySize, getRelatedProducts } from "@/api/products";
 import ProductStructuredData from "@/components/ProductStructuredData";
 import BreadcrumbStructuredData from "@/components/BreadcrumbStructuredData";
 import image50ml from "@/assets/MEN/50ml.png";

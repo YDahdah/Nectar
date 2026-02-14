@@ -9,9 +9,8 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command";
-import { products } from "@/data/products";
+import { getProductList, getPriceBySize } from "@/api/products";
 import { useShop } from "@/contexts/ShopContext";
-import { getPriceBySize } from "@/data/products";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useDebounce } from "@/hooks/use-debounce";
 
@@ -42,36 +41,24 @@ const SearchDialog = ({ open, onOpenChange }: SearchDialogProps) => {
     }
   }, [open]);
 
+  const { products: allProducts } = getProductList({ gender: selectedGender });
+
   const filteredProducts = useMemo(() => {
     if (!debouncedSearchQuery.trim()) return [];
-    
     const query = debouncedSearchQuery.toLowerCase();
-    return products.filter((product) => {
-      return (
+    return allProducts.filter(
+      (product) =>
         product.name.toLowerCase().includes(query) ||
         product.category.toLowerCase().includes(query) ||
         product.description?.toLowerCase().includes(query)
-      );
-    });
-  }, [debouncedSearchQuery]);
+    );
+  }, [debouncedSearchQuery, allProducts]);
 
-  // Get suggestions based on selected gender section
   const suggestions = useMemo(() => {
     if (!searchQuery.trim() || filteredProducts.length === 0) return [];
-    
-    const genderFilter = selectedGender === "all" ? null : selectedGender;
-    let suggestionProducts = products;
-    
-    if (genderFilter) {
-      suggestionProducts = products.filter((p) => p.gender === genderFilter);
-    }
-    
-    // Exclude already shown products and limit to 5 suggestions
     const excludedIds = new Set(filteredProducts.map((p) => p.id));
-    return suggestionProducts
-      .filter((p) => !excludedIds.has(p.id))
-      .slice(0, 5);
-  }, [searchQuery, filteredProducts, selectedGender]);
+    return allProducts.filter((p) => !excludedIds.has(p.id)).slice(0, 5);
+  }, [searchQuery, filteredProducts, allProducts]);
 
   const handleSelectProduct = (productId: string) => {
     navigate(`/product/${productId}`);

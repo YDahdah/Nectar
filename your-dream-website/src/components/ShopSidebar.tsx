@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { getBrandFromName } from "@/data/products";
-import { products } from "@/data/products";
+import { getProductList, getBrandFromName } from "@/api/products";
 import {
   Select,
   SelectContent,
@@ -33,12 +32,9 @@ const ShopSidebar = ({
   ];
 
   const availableBrands = useMemo(() => {
-    const filteredProducts =
-      selectedGender === "all"
-        ? products
-        : products.filter((p) => p.gender === selectedGender);
+    const { products: list } = getProductList({ gender: selectedGender });
     const brands = new Set<string>();
-    filteredProducts.forEach((product) => {
+    list.forEach((product) => {
       brands.add(getBrandFromName(product.name));
     });
     return Array.from(brands).sort();

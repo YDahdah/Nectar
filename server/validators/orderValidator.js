@@ -28,7 +28,7 @@ export const orderSchema = Joi.object({
       'string.pattern.base': 'Last name can only contain letters, spaces, hyphens, and apostrophes'
     }),
   
-  email: Joi.string().required().email().trim().lowercase()
+  email: Joi.string().optional().allow('').email().trim().lowercase()
     .max(255)
     .messages({
       'string.email': 'Please provide a valid email address'

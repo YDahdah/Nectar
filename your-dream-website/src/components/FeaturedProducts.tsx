@@ -3,15 +3,16 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import ProductCard from "./ProductCard";
 import ProductCardSkeleton from "./ProductCardSkeleton";
-import { getFeaturedProducts } from "@/data/products";
+import { getFeaturedProducts } from "@/api/products";
 import { prefetchShop } from "@/prefetch";
 import { getImageUrl } from "@/lib/config";
 import { getProductImageUrl } from "@/lib/productImages";
 import { preloadCriticalImages } from "@/lib/imagePreloader";
+import { FEATURED_PRODUCTS_LIMIT } from "@/constants";
 
 const FeaturedProducts = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const featuredProducts = getFeaturedProducts(8);
+  const featuredProducts = getFeaturedProducts(FEATURED_PRODUCTS_LIMIT);
 
   useEffect(() => {
     // Preload first 4 product images (above the fold)
