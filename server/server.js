@@ -29,6 +29,58 @@ const app = express();
 // Trust proxy (important for rate limiting and IP detection)
 app.set("trust proxy", 1);
 
+// CORS origins configuration (defined early for use in OPTIONS handler)
+const corsOrigins = [
+  "http://localhost:8080",
+  "https://perfumenectar.com",
+  "https://www.perfumenectar.com",
+  "https://api.perfumenectar.com",
+];
+
+// CORS origin validation function
+const corsOriginValidator = (origin) => {
+  if (!origin) return true; // Allow requests with no origin
+  
+  const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
+  
+  return corsOrigins.some(allowed => {
+    const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
+    if (normalizedOrigin === normalizedAllowed) return true;
+    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.")) return true;
+    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://")) return true;
+    return false;
+  });
+};
+
+// Handle OPTIONS preflight requests FIRST - before any other middleware
+// This ensures CORS preflight requests always get proper headers
+// CRITICAL: Must return exact origin (not *) when credentials: true
+app.options("*", (req, res) => {
+  const origin = req.headers.origin;
+  
+  // If no origin, allow but don't set CORS headers (non-browser request)
+  if (!origin) {
+    res.status(204).end();
+    return;
+  }
+  
+  // Validate origin
+  if (corsOriginValidator(origin)) {
+    // CRITICAL: Set exact origin (required when credentials: true)
+    // Browser will reject if we use * while credentials: true
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    res.status(204).end();
+  } else {
+    // Origin not allowed - don't set CORS headers, browser will block
+    console.warn(`⚠️  CORS preflight blocked for origin: ${origin}`);
+    res.status(403).end();
+  }
+});
+
 // Health check endpoints - must be before middleware to respond immediately
 // Cloud Run uses these for health checks
 app.get("/health", (req, res) => {
@@ -51,52 +103,34 @@ app.get("/", (req, res) => {
   });
 });
 
-const corsOrigins = [
-  "http://localhost:8080",
-  "https://perfumenectar.com",
-  "https://www.perfumenectar.com",
-  "https://api.perfumenectar.com",
-];
-
 // Log CORS origins on startup
 console.log("🌐 CORS allowed origins:", corsOrigins);
 
-// CORS origin validation function (reusable)
-const corsOriginValidator = (origin, callback) => {
-  // Allow requests with no origin (like mobile apps or curl requests)
+// CORS origin validation function for cors middleware (callback-based)
+// CRITICAL: When credentials: true, we MUST return exact origin (not *)
+const corsOriginValidatorCallback = (origin, callback) => {
   if (!origin) {
-    return callback(null, true);
+    // No origin header (non-browser request) - allow but don't set CORS headers
+    callback(null, true);
+    return;
   }
 
-  // Normalize origin (remove trailing slash, handle www variants)
-  const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
-  
-  // Check if origin is in allowed list (exact match or www variant)
-  const isAllowed = corsOrigins.some(allowed => {
-    const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
-    // Exact match
-    if (normalizedOrigin === normalizedAllowed) return true;
-    // www variant matching
-    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.")) return true;
-    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://")) return true;
-    return false;
-  });
-
-  if (isAllowed) {
+  if (corsOriginValidator(origin)) {
+    // Return the EXACT origin (required when credentials: true)
+    // Browser will reject if we return * while credentials: true
     console.log(`✅ CORS allowed origin: ${origin}`);
-    callback(null, true);
+    callback(null, origin); // Return exact origin, not true
   } else {
-    // Log blocked origin for debugging
     console.warn(`⚠️  CORS blocked origin: ${origin}`);
     console.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
-    // Return false to reject - CORS middleware will handle preflight response
     callback(null, false);
   }
 };
 
 // CORS configuration object (reusable)
+// IMPORTANT: origin must return exact origin string (not true/*) when credentials: true
 const corsConfig = {
-  origin: corsOriginValidator,
+  origin: corsOriginValidatorCallback,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
@@ -108,19 +142,17 @@ const corsConfig = {
     "Access-Control-Request-Headers",
   ],
   exposedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
+  credentials: true, // When true, origin MUST be exact string, not *
   preflightContinue: false,
   optionsSuccessStatus: 204,
   maxAge: 86400, // Cache preflight requests for 24 hours
 };
 
-// CORS middleware - must be first to handle preflight requests
-// This MUST be before any other middleware to ensure OPTIONS requests get CORS headers
+// CORS middleware - handles CORS for all non-OPTIONS requests
+// OPTIONS requests are already handled above
+// This middleware adds CORS headers to all responses (success and error)
+// CRITICAL: Must be before other middleware to ensure headers are set
 app.use(cors(corsConfig));
-
-// Explicitly handle OPTIONS preflight requests for all routes
-// This ensures preflight requests get CORS headers even if middleware order changes
-app.options("*", cors(corsConfig));
 
 // Security middleware
 app.use(helmetMiddleware);

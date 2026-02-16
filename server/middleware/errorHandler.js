@@ -18,7 +18,38 @@ export class ApiError extends Error {
 }
 
 /**
+ * Add CORS headers to response
+ * CRITICAL: Error responses MUST include CORS headers or browser will block them
+ */
+function addCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const corsOrigins = [
+    "http://localhost:8080",
+    "https://perfumenectar.com",
+    "https://www.perfumenectar.com",
+    "https://api.perfumenectar.com",
+  ];
+
+  // Normalize and check origin
+  if (origin) {
+    const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
+    const isAllowed = corsOrigins.some(allowed => {
+      const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
+      return normalizedOrigin === normalizedAllowed ||
+        normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.") ||
+        normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://");
+    });
+
+    if (isAllowed) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+  }
+}
+
+/**
  * Error handling middleware
+ * IMPORTANT: Must add CORS headers to error responses
  */
 export function errorHandler(err, req, res, next) {
   let error = { ...err };
@@ -68,6 +99,10 @@ export function errorHandler(err, req, res, next) {
 
   const statusCode = error.statusCode || 500;
   const message = error.message || 'Internal Server Error';
+
+  // CRITICAL: Add CORS headers to error responses
+  // Without this, browser will block error responses even if preflight succeeded
+  addCorsHeaders(req, res);
 
   // Don't expose internal error details in production
   const response = {
