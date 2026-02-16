@@ -64,6 +64,8 @@ export default defineConfig(({ mode }) => ({
     },
     // Ensure React is deduplicated - prevents multiple React instances
     dedupe: ["react", "react-dom"],
+    // Ensure React is always resolved from the same location
+    preserveSymlinks: false,
   },
   build: {
     target: "esnext",
@@ -75,10 +77,17 @@ export default defineConfig(({ mode }) => ({
       include: [/node_modules/],
       transformMixedEsModules: true,
     },
+    // Ensure proper module resolution for React
+    modulePreload: {
+      polyfill: true,
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Order matters: check specific chunks first before falling back to vendor
+          
           // React core - most critical, should be cached longest
+          // Must be loaded first before any Radix UI components
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('react/jsx-runtime')) {
             return 'react-vendor';
           }
@@ -90,7 +99,7 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('node_modules/@tanstack/react-query')) {
             return 'react-query';
           }
-          // UI libraries - split by usage frequency
+          // UI libraries - Radix UI (check before vendor to avoid circular deps)
           if (id.includes('node_modules/radix-ui') || id.includes('@radix-ui')) {
             return 'radix-ui';
           }
@@ -118,10 +127,8 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('node_modules/recharts')) {
             return 'charts';
           }
-          // Other vendor libraries
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
+          // Other vendor libraries - only if not already matched above
+          // This prevents circular dependencies by ensuring specific chunks are checked first
         },
         chunkFileNames: "assets/js/[name]-[hash].js",
         entryFileNames: "assets/js/[name]-[hash].js",
@@ -143,7 +150,16 @@ export default defineConfig(({ mode }) => ({
     reportCompressedSize: true,
   },
   optimizeDeps: {
-    include: ["react", "react-dom", "react-router-dom", "detect-node-es"],
+    include: [
+      "react", 
+      "react-dom", 
+      "react-router-dom", 
+      "detect-node-es",
+      "@radix-ui/react-slot",
+      "@radix-ui/react-primitive",
+      "@radix-ui/react-context",
+      "@radix-ui/react-compose-refs"
+    ],
     // Force React to be pre-bundled as a singleton
     force: true,
   },
