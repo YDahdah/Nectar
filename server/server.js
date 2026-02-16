@@ -246,24 +246,70 @@ app.use(errorHandler);
 export default app;
 
 // Start server if running directly
-const PORT = process.env.PORT || 3000;
+const startServer = (port) => {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      logger.info(`🚀 Server running on port ${port}`);
+      logger.info(`📍 Health check: http://localhost:${port}/health`);
+      logger.info(`📍 API info: http://localhost:${port}/api`);
+      logger.info(`Environment: ${config.nodeEnv}`);
+      resolve(server);
+    });
 
-const server = app.listen(PORT, () => {
-  logger.info(`🚀 Server running on port ${PORT}`);
-  logger.info(`📍 Health check: http://localhost:${PORT}/health`);
-  logger.info(`📍 API info: http://localhost:${PORT}/api`);
-  logger.info(`Environment: ${config.nodeEnv}`);
-});
+    server.on("error", (error) => {
+      if (error.code === "EADDRINUSE") {
+        reject(new Error(`Port ${port} is already in use`));
+      } else {
+        logger.error("❌ Server error:", error);
+        reject(error);
+      }
+    });
+  });
+};
 
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received, shutting down...");
-  server.close(() => process.exit(0));
-});
+const basePort = parseInt(process.env.PORT || "3000", 10);
+let currentPort = basePort;
+const maxAttempts = 10;
 
-process.on("SIGINT", () => {
-  logger.info("SIGINT received, shutting down...");
-  server.close(() => process.exit(0));
+const tryStartServer = async () => {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const server = await startServer(currentPort);
+      
+      // Graceful shutdown handlers
+      process.on("SIGTERM", () => {
+        logger.info("SIGTERM received, shutting down...");
+        server.close(() => process.exit(0));
+      });
+
+      process.on("SIGINT", () => {
+        logger.info("SIGINT received, shutting down...");
+        server.close(() => process.exit(0));
+      });
+      
+      return; // Successfully started
+    } catch (error) {
+      if (error.message.includes("already in use")) {
+        if (attempt === 0 && currentPort === basePort) {
+          logger.warn(`⚠️  Port ${currentPort} is already in use. Trying alternative ports...`);
+        }
+        currentPort = basePort + attempt + 1;
+        logger.info(`   Trying port ${currentPort}...`);
+      } else {
+        logger.error("❌ Failed to start server:", error);
+        process.exit(1);
+      }
+    }
+  }
+  
+  logger.error(`❌ Could not find an available port after ${maxAttempts} attempts (tried ports ${basePort}-${currentPort})`);
+  logger.error(`   Please stop the process using port ${basePort} or set a different PORT environment variable`);
+  process.exit(1);
+};
+
+tryStartServer().catch((error) => {
+  logger.error("Failed to start server:", error);
+  process.exit(1);
 });
 
 // // Check if this file is being run directly
