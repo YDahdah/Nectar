@@ -33,6 +33,9 @@ app.set("trust proxy", 1);
 // Use config which supports environment variables via CORS_ORIGINS
 const corsOrigins = config.security.corsOrigins || [
   "https://perfumenectar.com",
+  "https://www.perfumenectar.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
 ];
 
 // CORS origin validation function
@@ -49,62 +52,33 @@ const corsOriginValidator = (origin) => {
   });
 };
 
-// Handle OPTIONS preflight requests FIRST - before any other middleware
-// This ensures CORS preflight requests always get proper headers
-// CRITICAL: Must return exact origin (not *) when credentials: true
-// This MUST be before any middleware to catch OPTIONS requests immediately
-// Handle both wildcard and specific paths
-app.options("*", (req, res) => {
-  const origin = req.headers.origin;
-  
-  // Log preflight request for debugging
-  logger.info(`OPTIONS preflight request: ${req.method} ${req.path} from origin: ${origin || 'none'}`);
-  
-  // If no origin, allow but don't set CORS headers (non-browser request)
+// CORS origin validation for cors middleware (callback-based)
+// When credentials: true we MUST return exact origin (not *)
+const corsOriginValidatorCallback = (origin, callback) => {
   if (!origin) {
-    res.status(204).end();
+    callback(null, true);
     return;
   }
-  
-  // Validate origin
   if (corsOriginValidator(origin)) {
-    // CRITICAL: Set exact origin (required when credentials: true)
-    // Browser will reject if we use * while credentials: true
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    logger.info(`✅ OPTIONS preflight allowed for origin: ${origin} on path: ${req.path}`);
-    res.status(204).end();
+    callback(null, origin);
   } else {
-    // Origin not allowed - don't set CORS headers, browser will block
-    logger.warn(`⚠️  CORS preflight blocked for origin: ${origin}`);
-    logger.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
-    res.status(403).end();
+    logger.warn(`CORS blocked origin: ${origin}. Allowed: ${corsOrigins.join(", ")}`);
+    callback(null, false);
   }
-});
+};
 
-// Also handle OPTIONS for /api/* routes explicitly
-app.options("/api/*", (req, res) => {
-  const origin = req.headers.origin;
-  
-  if (!origin) {
-    res.status(204).end();
-    return;
-  }
-  
-  if (corsOriginValidator(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    res.status(204).end();
-  } else {
-    res.status(403).end();
-  }
-});
+// CORS config: exact origins (no *), credentials true, methods + headers as required
+const corsConfig = {
+  origin: corsOriginValidatorCallback,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
+  credentials: true,
+  optionsSuccessStatus: 204,
+  maxAge: 86400,
+};
+
+// OPTIONS preflight: let cors middleware return 204/200 with CORS headers (do not use * origin)
+app.options("*", cors(corsConfig));
 
 // Helper function to add CORS headers to responses
 const addCorsToResponse = (req, res) => {
@@ -140,53 +114,7 @@ app.get("/", (req, res) => {
 });
 
 // Log CORS origins on startup
-console.log("🌐 CORS allowed origins:", corsOrigins);
-
-// CORS origin validation function for cors middleware (callback-based)
-// CRITICAL: When credentials: true, we MUST return exact origin (not *)
-const corsOriginValidatorCallback = (origin, callback) => {
-  if (!origin) {
-    // No origin header (non-browser request) - allow but don't set CORS headers
-    callback(null, true);
-    return;
-  }
-
-  if (corsOriginValidator(origin)) {
-    // Return the EXACT origin (required when credentials: true)
-    // Browser will reject if we return * while credentials: true
-    console.log(`✅ CORS allowed origin: ${origin}`);
-    callback(null, origin); // Return exact origin, not true
-  } else {
-    console.warn(`⚠️  CORS blocked origin: ${origin}`);
-    console.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
-    callback(null, false);
-  }
-};
-
-// CORS configuration object (reusable)
-// IMPORTANT: origin must return exact origin string (not true/*) when credentials: true
-// This configuration ensures:
-// 1. OPTIONS preflight requests get proper headers
-// 2. Exact origin is returned (not *) when credentials: true
-// 3. All routes get CORS headers including error responses
-const corsConfig = {
-  origin: corsOriginValidatorCallback, // Returns exact origin string, not *
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Requested-With",
-    "Accept",
-    "Origin",
-    "Access-Control-Request-Method",
-    "Access-Control-Request-Headers",
-  ],
-  exposedHeaders: ["Content-Type", "Authorization"],
-  credentials: true, // CRITICAL: When true, origin MUST be exact string, not *
-  preflightContinue: false, // Don't continue to next middleware for OPTIONS
-  optionsSuccessStatus: 204, // Return 204 for OPTIONS (some clients expect this)
-  maxAge: 86400, // Cache preflight requests for 24 hours
-};
+logger.info("🌐 CORS allowed origins: " + corsOrigins.join(", "));
 
 // CORS middleware - handles CORS for all non-OPTIONS requests
 // OPTIONS requests are already handled above

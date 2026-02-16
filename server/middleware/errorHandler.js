@@ -1,4 +1,5 @@
 import logger from '../utils/logger.js';
+import config from '../config/config.js';
 
 /**
  * Custom error class for API errors
@@ -23,19 +24,19 @@ export class ApiError extends Error {
  */
 function addCorsHeaders(req, res) {
   const origin = req.headers.origin;
-  const allowedOrigins = [
+  const allowedOrigins = config.security?.corsOrigins || [
     "https://perfumenectar.com",
-    // Add more origins from config if needed
+    "https://www.perfumenectar.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
   ];
 
-  // Check if origin is allowed
   if (origin) {
     const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
     const isAllowed = allowedOrigins.some(allowed => {
-      const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
+      const normalizedAllowed = (allowed || "").replace(/\/$/, "").toLowerCase();
       return normalizedOrigin === normalizedAllowed;
     });
-    
     if (isAllowed) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
