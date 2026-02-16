@@ -146,7 +146,10 @@ const ShopSidebar = ({
                 {getGenderLabel(selectedGender)}
                 <button
                   type="button"
-                  onClick={() => onGenderChange("all")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGenderChange("all");
+                  }}
                   className="ml-1 rounded-full hover:bg-secondary-foreground/20"
                   aria-label={`Remove ${getGenderLabel(selectedGender)} filter`}
                 >
@@ -162,7 +165,10 @@ const ShopSidebar = ({
                 {selectedBrand}
                 <button
                   type="button"
-                  onClick={() => onBrandChange(null)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onBrandChange(null);
+                  }}
                   className="ml-1 rounded-full hover:bg-secondary-foreground/20"
                   aria-label={`Remove ${selectedBrand} filter`}
                 >
