@@ -30,32 +30,35 @@ const app = express();
 app.set("trust proxy", 1);
 
 // CORS origins configuration (defined early for use in OPTIONS handler)
-// Only allow requests from the production frontend
-const corsOrigins = [
+// Use config which supports environment variables via CORS_ORIGINS
+const corsOrigins = config.security.corsOrigins || [
   "https://perfumenectar.com",
 ];
 
 // CORS origin validation function
-// Only allows exact match for https://perfumenectar.com
+// Checks against all allowed origins from config
 const corsOriginValidator = (origin) => {
   if (!origin) return false; // Require origin header for browser requests
   
   const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
-  const normalizedAllowed = corsOrigins[0].replace(/\/$/, "").toLowerCase();
   
-  // Exact match only - no www variants or other domains
-  return normalizedOrigin === normalizedAllowed;
+  // Check against all allowed origins
+  return corsOrigins.some(allowedOrigin => {
+    const normalizedAllowed = allowedOrigin.replace(/\/$/, "").toLowerCase();
+    return normalizedOrigin === normalizedAllowed;
+  });
 };
 
 // Handle OPTIONS preflight requests FIRST - before any other middleware
 // This ensures CORS preflight requests always get proper headers
 // CRITICAL: Must return exact origin (not *) when credentials: true
 // This MUST be before any middleware to catch OPTIONS requests immediately
+// Handle both wildcard and specific paths
 app.options("*", (req, res) => {
   const origin = req.headers.origin;
   
   // Log preflight request for debugging
-  logger.info(`OPTIONS preflight request: ${req.path} from origin: ${origin || 'none'}`);
+  logger.info(`OPTIONS preflight request: ${req.method} ${req.path} from origin: ${origin || 'none'}`);
   
   // If no origin, allow but don't set CORS headers (non-browser request)
   if (!origin) {
@@ -72,7 +75,7 @@ app.options("*", (req, res) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Max-Age", "86400");
-    logger.info(`✅ OPTIONS preflight allowed for origin: ${origin}`);
+    logger.info(`✅ OPTIONS preflight allowed for origin: ${origin} on path: ${req.path}`);
     res.status(204).end();
   } else {
     // Origin not allowed - don't set CORS headers, browser will block
@@ -82,9 +85,40 @@ app.options("*", (req, res) => {
   }
 });
 
+// Also handle OPTIONS for /api/* routes explicitly
+app.options("/api/*", (req, res) => {
+  const origin = req.headers.origin;
+  
+  if (!origin) {
+    res.status(204).end();
+    return;
+  }
+  
+  if (corsOriginValidator(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    res.status(204).end();
+  } else {
+    res.status(403).end();
+  }
+});
+
+// Helper function to add CORS headers to responses
+const addCorsToResponse = (req, res) => {
+  const origin = req.headers.origin;
+  if (origin && corsOriginValidator(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+};
+
 // Health check endpoints - must be before middleware to respond immediately
 // Cloud Run uses these for health checks
 app.get("/health", (req, res) => {
+  addCorsToResponse(req, res);
   res.status(200).json({
     status: "ok",
     message: "API is running",
@@ -95,6 +129,7 @@ app.get("/health", (req, res) => {
 // Root path - respond immediately for Cloud Run health checks
 // Cloud Run may check the root path, so we handle it before middleware
 app.get("/", (req, res) => {
+  addCorsToResponse(req, res);
   res.status(200).json({
     success: true,
     message: "Nectar API Server",

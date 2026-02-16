@@ -147,6 +147,7 @@ const Checkout = () => {
           headers: {
             "Content-Type": "application/json",
           },
+          credentials: "include", // Include credentials for CORS
           body: JSON.stringify(orderData),
         });
       } catch (networkError) {

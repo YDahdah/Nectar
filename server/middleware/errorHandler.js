@@ -23,17 +23,24 @@ export class ApiError extends Error {
  */
 function addCorsHeaders(req, res) {
   const origin = req.headers.origin;
-  const allowedOrigin = "https://perfumenectar.com";
+  const allowedOrigins = [
+    "https://perfumenectar.com",
+    // Add more origins from config if needed
+  ];
 
-  // Only allow exact match for https://perfumenectar.com
+  // Check if origin is allowed
   if (origin) {
     const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
-    const normalizedAllowed = allowedOrigin.replace(/\/$/, "").toLowerCase();
+    const isAllowed = allowedOrigins.some(allowed => {
+      const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
+      return normalizedOrigin === normalizedAllowed;
+    });
     
-    // Exact match only
-    if (normalizedOrigin === normalizedAllowed) {
+    if (isAllowed) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
     }
   }
 }
