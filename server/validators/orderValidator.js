@@ -89,21 +89,21 @@ export function validateOrder(data) {
     };
   }
 
-  // Additional validation: verify total price matches items
-  const calculatedSubtotal = value.items.reduce(
-    (sum, item) => sum + (item.price * item.quantity), 
-    0
-  );
-  const calculatedTotal = calculatedSubtotal + (value.shippingCost || 0);
-  
-  // Allow small rounding differences (0.01)
-  const priceDifference = Math.abs(calculatedTotal - value.totalPrice);
+  // Additional validation: verify total price matches items (round to avoid float drift)
+  const calculatedSubtotal = Math.round(
+    value.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100
+  ) / 100;
+  const shipping = Number(value.shippingCost) || 0;
+  const calculatedTotal = Math.round((calculatedSubtotal + shipping) * 100) / 100;
+  const providedTotal = Math.round(Number(value.totalPrice) * 100) / 100;
+
+  const priceDifference = Math.abs(calculatedTotal - providedTotal);
   if (priceDifference > 0.01) {
     return {
       isValid: false,
       errors: [{
         field: 'totalPrice',
-        message: `Total price mismatch. Calculated: $${calculatedTotal.toFixed(2)}, Provided: $${value.totalPrice.toFixed(2)}`
+        message: `Total price mismatch. Calculated: $${calculatedTotal.toFixed(2)}, Provided: $${providedTotal.toFixed(2)}`
       }],
       data: null
     };

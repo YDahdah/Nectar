@@ -117,7 +117,8 @@ const Checkout = () => {
 
     try {
       const shippingCost = formData.caza === "North Lebanon" ? 2.0 : 3.0;
-      const totalPrice = getTotalPrice() + shippingCost;
+      const subtotal = Math.round(getTotalPrice() * 100) / 100;
+      const totalPrice = Math.round((subtotal + shippingCost) * 100) / 100;
 
       const orderData = {
         ...formData,
@@ -159,7 +160,7 @@ const Checkout = () => {
 
       const contentType = response.headers.get("content-type") ?? "";
       const isJson = contentType.includes("application/json");
-      let result: { orderId?: string; error?: string; success?: boolean; message?: string } = {};
+      let result: { orderId?: string; error?: string; success?: boolean; message?: string; errors?: { field?: string; message?: string }[] } = {};
       if (isJson) {
         try {
           result = await response.json();
@@ -174,7 +175,11 @@ const Checkout = () => {
             "Checkout endpoint not found. If using local dev, start the backend (cd server && npm start) and set VITE_PROXY_TARGET=http://localhost:3000 in .env."
           );
         }
-        const msg = result?.error || result?.message || (response.status === 502 ? "Backend unavailable. Is the server running?" : "Failed to place order");
+        const msg =
+          result?.error ||
+          result?.message ||
+          (result?.errors?.length ? result.errors.map((e) => e.message).filter(Boolean).join(". ") : null) ||
+          (response.status === 502 ? "Backend unavailable. Is the server running?" : "Failed to place order");
         throw new Error(msg);
       }
 

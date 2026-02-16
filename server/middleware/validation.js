@@ -12,10 +12,10 @@ export function validateOrderData(req, res, next) {
       errors: validation.errors,
       ip: req.ip
     });
-    
+    const firstMessage = validation.errors?.[0]?.message || 'Validation failed';
     return res.status(400).json({
       success: false,
-      error: 'Validation failed',
+      error: firstMessage,
       errors: validation.errors
     });
   }
