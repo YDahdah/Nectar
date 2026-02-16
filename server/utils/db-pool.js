@@ -43,15 +43,30 @@ export async function getPool() {
 
 /**
  * Create database connection pool based on DB_TYPE
+ * Optimized pool settings for scalability
  */
 async function createPool() {
   const dbType = process.env.DB_TYPE || "postgresql";
+  
+  // Optimized pool configuration for scalability
+  // Adjust based on your database server capacity and expected load
+  const isProduction = process.env.NODE_ENV === "production";
+  
   const poolConfig = {
-    min: parseInt(process.env.DB_POOL_MIN || "2", 10),
-    max: parseInt(process.env.DB_POOL_MAX || "10", 10),
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    // Minimum connections: Keep some connections warm for faster response
+    min: parseInt(process.env.DB_POOL_MIN || (isProduction ? "5" : "2"), 10),
+    // Maximum connections: Scale based on environment
+    // Production: Higher limit for handling more concurrent requests
+    max: parseInt(process.env.DB_POOL_MAX || (isProduction ? "20" : "10"), 10),
+    // Idle timeout: Close idle connections after 30 seconds
+    idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || "30000", 10),
+    // Connection timeout: Fail fast if can't connect within 5 seconds
+    connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || "5000", 10),
+    // Statement timeout: Prevent long-running queries (30 seconds)
+    statementTimeout: parseInt(process.env.DB_STATEMENT_TIMEOUT || "30000", 10),
   };
+  
+  logger.info(`Database pool configuration: min=${poolConfig.min}, max=${poolConfig.max}, idleTimeout=${poolConfig.idleTimeoutMillis}ms`);
 
   try {
     switch (dbType.toLowerCase()) {
@@ -96,6 +111,10 @@ async function createPostgresPool(config) {
       max: config.max,
       idleTimeoutMillis: config.idleTimeoutMillis,
       connectionTimeoutMillis: config.connectionTimeoutMillis,
+      statement_timeout: config.statementTimeout,
+      // Connection keep-alive for better performance
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
       // SSL configuration for production
       ssl:
         process.env.NODE_ENV === "production"
@@ -103,6 +122,8 @@ async function createPostgresPool(config) {
               rejectUnauthorized: false,
             }
           : false,
+      // Application name for monitoring
+      application_name: process.env.APP_NAME || "nectar-api",
     });
 
     // Test connection
@@ -141,9 +162,13 @@ async function createMySQLPool(config) {
       password: process.env.DB_PASSWORD,
       waitForConnections: true,
       connectionLimit: config.max,
-      queueLimit: 0,
+      queueLimit: parseInt(process.env.DB_POOL_QUEUE_LIMIT || "0", 10), // 0 = unlimited queue
       enableKeepAlive: true,
-      keepAliveInitialDelay: 0,
+      keepAliveInitialDelay: parseInt(process.env.DB_POOL_KEEPALIVE_DELAY || "0", 10),
+      // Connection timeout
+      connectTimeout: config.connectionTimeoutMillis,
+      // Idle timeout
+      idleTimeout: config.idleTimeoutMillis,
       ssl:
         process.env.NODE_ENV === "production"
           ? {

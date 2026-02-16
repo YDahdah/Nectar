@@ -16,9 +16,17 @@
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600&family=Dancing+Script:wght@400;500;600;700&display=swap" as="style" />
     
+    <!-- API preconnect for faster API calls -->
+    <link rel="preconnect" href="https://api.perfumenectar.com" crossorigin />
+    <link rel="dns-prefetch" href="https://api.perfumenectar.com" />
+    
     <!-- Image loading optimization: preconnect to CDN if configured -->
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
     <link rel="dns-prefetch" href="https://unpkg.com" />
+    
+    <!-- Prefetch critical routes for faster navigation -->
+    <link rel="prefetch" href="/shop" />
+    <link rel="prefetch" href="/cart" />
 
     <!-- SEO Meta Tags -->
     <meta name="keywords" content="luxury perfumes, fragrances, cologne, perfume shop, Nectar, designer fragrances, men's perfume, women's perfume" />

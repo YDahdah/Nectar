@@ -3,6 +3,8 @@ import { sendEmail, testEmailConfig } from '../services/gmailService.js';
 import { body, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import logger from '../utils/logger.js';
+import { httpCacheMiddleware } from '../middleware/httpCache.js';
+import { cacheMiddleware } from '../middleware/cache.js';
 
 const router = express.Router();
 
@@ -130,8 +132,12 @@ router.post('/send-email', emailRateLimiter, validateEmailRequest, async (req, r
 /**
  * GET /test-email-config
  * Test email configuration without sending an email
+ * Cached for 5 minutes since config rarely changes
  */
-router.get('/test-email-config', async (req, res) => {
+router.get('/test-email-config', 
+  httpCacheMiddleware({ maxAge: 300, private: true }), // 5 min private cache
+  cacheMiddleware(5 * 60 * 1000), // 5 min application cache
+  async (req, res) => {
   try {
     const result = await testEmailConfig();
     

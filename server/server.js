@@ -54,12 +54,15 @@ app.get("/", (req, res) => {
 const corsOrigins = [
   "http://localhost:8080",
   "https://perfumenectar.com",
+  "https://www.perfumenectar.com",
   "https://api.perfumenectar.com",
 ];
 
 // Log CORS origins on startup
 console.log("🌐 CORS allowed origins:", corsOrigins);
 
+// CORS middleware - must be first to handle preflight requests
+// This MUST be before any other middleware to ensure OPTIONS requests get CORS headers
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -68,20 +71,46 @@ app.use(
         return callback(null, true);
       }
 
-      // Check if origin is in allowed list
-      if (corsOrigins.includes(origin)) {
+      // Normalize origin (remove trailing slash, handle www variants)
+      const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
+      
+      // Check if origin is in allowed list (exact match or www variant)
+      const isAllowed = corsOrigins.some(allowed => {
+        const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
+        // Exact match
+        if (normalizedOrigin === normalizedAllowed) return true;
+        // www variant matching
+        if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.")) return true;
+        if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://")) return true;
+        return false;
+      });
+
+      if (isAllowed) {
+        console.log(`✅ CORS allowed origin: ${origin}`);
         callback(null, true);
       } else {
+        // Log blocked origin for debugging
         console.warn(`⚠️  CORS blocked origin: ${origin}`);
-        callback(new Error("Not allowed by CORS"));
+        console.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
+        // Return false to reject - CORS middleware will handle preflight response
+        callback(null, false);
       }
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Access-Control-Request-Method",
+      "Access-Control-Request-Headers",
+    ],
     exposedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204,
+    maxAge: 86400, // Cache preflight requests for 24 hours
   }),
 );
 
@@ -97,12 +126,35 @@ app.use(compression({
     if (req.headers['x-no-compression']) {
       return false;
     }
+    // Don't compress already compressed content
+    if (req.url.match(/\.(jpg|jpeg|png|gif|webp|svg|woff2|woff|ttf|eot|zip|gz)$/i)) {
+      return false;
+    }
     // Use compression for all other responses
     return compression.filter(req, res);
   },
   level: 6, // Compression level (1-9, 6 is a good balance)
   threshold: 1024, // Only compress responses larger than 1KB
+  // Use Brotli if available (better compression than gzip)
+  brotli: true,
 }));
+
+// CDN-friendly headers middleware
+app.use((req, res, next) => {
+  // Add CDN cache control headers
+  if (req.path.startsWith('/api/')) {
+    // API responses should be cached by CDN with shorter TTL
+    res.setHeader('CDN-Cache-Control', 'public, max-age=300, s-maxage=300');
+  } else if (req.path.match(/\.(js|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico)$/i)) {
+    // Static assets can be cached longer
+    res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
+  }
+  
+  // Add timing headers for performance monitoring
+  res.setHeader('X-Request-ID', req.headers['x-request-id'] || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  
+  next();
+});
 app.use(rateLimiter);
 app.use(requestSizeLimit("10mb"));
 

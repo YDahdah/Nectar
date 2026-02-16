@@ -2,7 +2,7 @@ import logger from "../utils/logger.js";
 
 /**
  * Simple in-memory cache middleware
- * For production, replace with Redis for distributed caching
+ * Used as fallback when Redis is not available
  */
 class MemoryCache {
   constructor() {
@@ -57,7 +57,136 @@ setInterval(() => {
 }, 10 * 60 * 1000);
 
 /**
+ * Redis cache client with automatic fallback to memory cache
+ * Supports distributed caching for horizontal scaling
+ */
+let redisClient = null;
+let redisAvailable = false;
+
+/**
+ * Initialize Redis client if REDIS_URL is configured
+ * Falls back to memory cache if Redis is unavailable
+ */
+async function initRedis() {
+  if (redisClient !== null) {
+    return redisClient;
+  }
+
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    logger.info("Redis not configured, using in-memory cache");
+    redisAvailable = false;
+    return null;
+  }
+
+  try {
+    const { createClient } = await import("redis");
+    redisClient = createClient({
+      url: redisUrl,
+      socket: {
+        reconnectStrategy: (retries) => {
+          if (retries > 10) {
+            logger.error("Redis reconnection failed after 10 attempts, falling back to memory cache");
+            redisAvailable = false;
+            return new Error("Redis connection failed");
+          }
+          return Math.min(retries * 100, 3000);
+        },
+      },
+    });
+
+    redisClient.on("error", (err) => {
+      logger.error("Redis client error:", err);
+      redisAvailable = false;
+    });
+
+    redisClient.on("connect", () => {
+      logger.info("Redis client connected");
+      redisAvailable = true;
+    });
+
+    redisClient.on("reconnecting", () => {
+      logger.warn("Redis client reconnecting...");
+    });
+
+    await redisClient.connect();
+    redisAvailable = true;
+    logger.info("Redis cache initialized successfully");
+    return redisClient;
+  } catch (error) {
+    logger.warn("Failed to initialize Redis, falling back to memory cache:", error.message);
+    redisAvailable = false;
+    return null;
+  }
+}
+
+// Initialize Redis on module load
+initRedis().catch((err) => {
+  logger.warn("Redis initialization error:", err.message);
+});
+
+/**
+ * Get cache value from Redis or memory cache
+ */
+async function getCacheValue(key) {
+  if (redisAvailable && redisClient) {
+    try {
+      const value = await redisClient.get(key);
+      if (value) {
+        return JSON.parse(value);
+      }
+      return null;
+    } catch (error) {
+      logger.error("Redis get error:", error);
+      redisAvailable = false;
+      // Fallback to memory cache
+      return memoryCache.get(key);
+    }
+  }
+  return memoryCache.get(key);
+}
+
+/**
+ * Set cache value in Redis or memory cache
+ */
+async function setCacheValue(key, value, ttlMs) {
+  if (redisAvailable && redisClient) {
+    try {
+      const ttlSeconds = Math.floor(ttlMs / 1000);
+      await redisClient.setEx(key, ttlSeconds, JSON.stringify(value));
+      return;
+    } catch (error) {
+      logger.error("Redis set error:", error);
+      redisAvailable = false;
+      // Fallback to memory cache
+      memoryCache.set(key, value, ttlMs);
+      return;
+    }
+  }
+  memoryCache.set(key, value, ttlMs);
+}
+
+/**
+ * Delete cache value from Redis or memory cache
+ */
+async function deleteCacheValue(key) {
+  if (redisAvailable && redisClient) {
+    try {
+      await redisClient.del(key);
+      return;
+    } catch (error) {
+      logger.error("Redis delete error:", error);
+      redisAvailable = false;
+      memoryCache.delete(key);
+      return;
+    }
+  }
+  memoryCache.delete(key);
+}
+
+/**
  * Cache middleware for Express routes
+ * Uses Redis if available, falls back to memory cache
  * 
  * Usage:
  *   app.get('/api/products', cacheMiddleware(5 * 60 * 1000), productController.getProducts);
@@ -70,21 +199,22 @@ export function cacheMiddleware(
   ttl = 5 * 60 * 1000,
   keyGenerator = (req) => {
     // Default: use method + path + query string as key
-    return `${req.method}:${req.path}:${JSON.stringify(req.query)}`;
+    return `cache:${req.method}:${req.path}:${JSON.stringify(req.query)}`;
   }
 ) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // Only cache GET requests
     if (req.method !== "GET") {
       return next();
     }
 
     const cacheKey = keyGenerator(req);
-    const cached = memoryCache.get(cacheKey);
+    const cached = await getCacheValue(cacheKey);
 
     if (cached) {
       logger.debug(`Cache HIT: ${cacheKey}`);
       res.setHeader("X-Cache", "HIT");
+      res.setHeader("X-Cache-Provider", redisAvailable ? "Redis" : "Memory");
       return res.json(cached);
     }
 
@@ -95,9 +225,12 @@ export function cacheMiddleware(
     res.json = function (data) {
       // Only cache successful responses
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        memoryCache.set(cacheKey, data, ttl);
+        setCacheValue(cacheKey, data, ttl).catch((err) => {
+          logger.error("Failed to cache response:", err);
+        });
         logger.debug(`Cache SET: ${cacheKey}`);
         res.setHeader("X-Cache", "MISS");
+        res.setHeader("X-Cache-Provider", redisAvailable ? "Redis" : "Memory");
       }
       return originalJson(data);
     };
@@ -112,8 +245,20 @@ export function cacheMiddleware(
  * 
  * @param {string} pattern - Pattern to match cache keys (supports wildcards)
  */
-export function clearCache(pattern = null) {
+export async function clearCache(pattern = null) {
   if (!pattern) {
+    if (redisAvailable && redisClient) {
+      try {
+        // Clear all cache keys (use with caution in production)
+        const keys = await redisClient.keys("cache:*");
+        if (keys.length > 0) {
+          await redisClient.del(keys);
+        }
+        logger.info("Redis cache cleared");
+      } catch (error) {
+        logger.error("Failed to clear Redis cache:", error);
+      }
+    }
     memoryCache.clear();
     logger.info("Cache cleared");
     return;
@@ -121,6 +266,22 @@ export function clearCache(pattern = null) {
 
   // Simple pattern matching (can be enhanced)
   const regex = new RegExp(pattern.replace("*", ".*"));
+  
+  if (redisAvailable && redisClient) {
+    try {
+      const keys = await redisClient.keys("cache:*");
+      for (const key of keys) {
+        if (regex.test(key)) {
+          await redisClient.del(key);
+        }
+      }
+      logger.info(`Redis cache cleared for pattern: ${pattern}`);
+    } catch (error) {
+      logger.error("Failed to clear Redis cache pattern:", error);
+    }
+  }
+  
+  // Also clear memory cache
   for (const key of memoryCache.cache.keys()) {
     if (regex.test(key)) {
       memoryCache.delete(key);
@@ -130,64 +291,33 @@ export function clearCache(pattern = null) {
 }
 
 /**
- * Redis cache middleware (for production)
- * Uncomment and configure when Redis is available
- * 
- * Example:
- *   import redis from 'redis';
- *   const redisClient = redis.createClient({ url: process.env.REDIS_URL });
- *   await redisClient.connect();
- * 
- * Then replace memoryCache with Redis client
+ * Get cache statistics
  */
-/*
-import redis from 'redis';
-
-let redisClient = null;
-
-async function getRedisClient() {
-  if (!redisClient) {
-    redisClient = redis.createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
-    });
-    await redisClient.connect();
-  }
-  return redisClient;
-}
-
-export async function redisCacheMiddleware(ttl = 5 * 60 * 1000) {
-  return async (req, res, next) => {
-    if (req.method !== 'GET') {
-      return next();
-    }
-
-    const cacheKey = `cache:${req.method}:${req.path}:${JSON.stringify(req.query)}`;
-    const client = await getRedisClient();
-
-    try {
-      const cached = await client.get(cacheKey);
-      if (cached) {
-        res.setHeader('X-Cache', 'HIT');
-        return res.json(JSON.parse(cached));
-      }
-
-      const originalJson = res.json.bind(res);
-      res.json = function(data) {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          client.setEx(cacheKey, Math.floor(ttl / 1000), JSON.stringify(data));
-          res.setHeader('X-Cache', 'MISS');
-        }
-        return originalJson(data);
-      };
-
-      next();
-    } catch (error) {
-      logger.error('Redis cache error:', error);
-      next(); // Continue without caching on error
-    }
+export async function getCacheStats() {
+  const stats = {
+    provider: redisAvailable ? "Redis" : "Memory",
+    available: redisAvailable,
   };
-}
-*/
 
-export { memoryCache };
+  if (redisAvailable && redisClient) {
+    try {
+      const info = await redisClient.info("stats");
+      const keyspace = await redisClient.info("keyspace");
+      stats.redis = {
+        info,
+        keyspace,
+      };
+    } catch (error) {
+      logger.error("Failed to get Redis stats:", error);
+    }
+  } else {
+    stats.memory = {
+      size: memoryCache.cache.size,
+    };
+  }
+
+  return stats;
+}
+
+export { memoryCache, redisClient, redisAvailable };
 export default cacheMiddleware;

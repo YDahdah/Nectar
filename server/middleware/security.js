@@ -18,10 +18,12 @@ export const corsMiddleware = cors({
 
 /**
  * Rate limiting middleware
+ * Skip OPTIONS requests (CORS preflight) to avoid blocking them
  */
 export const rateLimiter = rateLimit({
   windowMs: config.security.rateLimitWindow,
   max: config.security.rateLimitMax,
+  skip: (req) => req.method === "OPTIONS", // Skip preflight requests
   message: {
     success: false,
     error: "Too many requests from this IP, please try again later.",
@@ -39,10 +41,12 @@ export const rateLimiter = rateLimit({
 
 /**
  * Strict rate limiter for checkout endpoint
+ * Skip OPTIONS requests (CORS preflight) to avoid blocking them
  */
 export const checkoutRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 orders per 15 minutes
+  skip: (req) => req.method === "OPTIONS", // Skip preflight requests
   message: {
     success: false,
     error: "Too many checkout attempts. Please wait before trying again.",
@@ -60,10 +64,12 @@ export const checkoutRateLimiter = rateLimit({
 
 /**
  * Rate limiter for newsletter signup
+ * Skip OPTIONS requests (CORS preflight) to avoid blocking them
  */
 export const newsletterRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 signups per 15 minutes per IP
+  skip: (req) => req.method === "OPTIONS", // Skip preflight requests
   message: {
     success: false,
     error: "Too many signup attempts. Please try again later.",
@@ -81,6 +87,7 @@ export const newsletterRateLimiter = rateLimit({
 
 /**
  * Helmet security headers
+ * Configured to not interfere with CORS headers
  */
 export const helmetMiddleware = helmet({
   contentSecurityPolicy: {
@@ -92,6 +99,8 @@ export const helmetMiddleware = helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin requests
+  crossOriginOpenerPolicy: false, // Don't block cross-origin windows
 });
 
 /**
