@@ -61,63 +61,68 @@ const corsOrigins = [
 // Log CORS origins on startup
 console.log("🌐 CORS allowed origins:", corsOrigins);
 
+// CORS origin validation function (reusable)
+const corsOriginValidator = (origin, callback) => {
+  // Allow requests with no origin (like mobile apps or curl requests)
+  if (!origin) {
+    return callback(null, true);
+  }
+
+  // Normalize origin (remove trailing slash, handle www variants)
+  const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
+  
+  // Check if origin is in allowed list (exact match or www variant)
+  const isAllowed = corsOrigins.some(allowed => {
+    const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
+    // Exact match
+    if (normalizedOrigin === normalizedAllowed) return true;
+    // www variant matching
+    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.")) return true;
+    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://")) return true;
+    return false;
+  });
+
+  if (isAllowed) {
+    console.log(`✅ CORS allowed origin: ${origin}`);
+    callback(null, true);
+  } else {
+    // Log blocked origin for debugging
+    console.warn(`⚠️  CORS blocked origin: ${origin}`);
+    console.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
+    // Return false to reject - CORS middleware will handle preflight response
+    callback(null, false);
+  }
+};
+
+// CORS configuration object (reusable)
+const corsConfig = {
+  origin: corsOriginValidator,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "Access-Control-Request-Method",
+    "Access-Control-Request-Headers",
+  ],
+  exposedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+  maxAge: 86400, // Cache preflight requests for 24 hours
+};
+
 // CORS middleware - must be first to handle preflight requests
 // This MUST be before any other middleware to ensure OPTIONS requests get CORS headers
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) {
-        return callback(null, true);
-      }
+app.use(cors(corsConfig));
 
-      // Normalize origin (remove trailing slash, handle www variants)
-      const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
-      
-      // Check if origin is in allowed list (exact match or www variant)
-      const isAllowed = corsOrigins.some(allowed => {
-        const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
-        // Exact match
-        if (normalizedOrigin === normalizedAllowed) return true;
-        // www variant matching
-        if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.")) return true;
-        if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://")) return true;
-        return false;
-      });
+// Explicitly handle OPTIONS preflight requests for all routes
+// This ensures preflight requests get CORS headers even if middleware order changes
+app.options("*", cors(corsConfig));
 
-      if (isAllowed) {
-        console.log(`✅ CORS allowed origin: ${origin}`);
-        callback(null, true);
-      } else {
-        // Log blocked origin for debugging
-        console.warn(`⚠️  CORS blocked origin: ${origin}`);
-        console.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
-        // Return false to reject - CORS middleware will handle preflight response
-        callback(null, false);
-      }
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-      "Origin",
-      "Access-Control-Request-Method",
-      "Access-Control-Request-Headers",
-    ],
-    exposedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204,
-    maxAge: 86400, // Cache preflight requests for 24 hours
-  }),
-);
-
-// CORS first so preflight (OPTIONS) always gets CORS headers before any other middleware
-// app.use(corsMiddleware);
 // Security middleware
-// app.options("*", corsMiddleware);
 app.use(helmetMiddleware);
 // Compression middleware - compress responses to reduce bandwidth
 app.use(compression({

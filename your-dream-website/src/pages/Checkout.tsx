@@ -116,7 +116,7 @@ const Checkout = () => {
     setIsSubmitting(true);
 
     try {
-      const shippingCost = formData.caza === "North Lebanon" ? 3.0 : 5.0;
+      const shippingCost = formData.caza === "North Lebanon" ? 2.0 : 3.0;
       const totalPrice = getTotalPrice() + shippingCost;
 
       const orderData = {
@@ -213,7 +213,7 @@ const Checkout = () => {
     }
   };
 
-  const shippingCost = formData.caza === "North Lebanon" ? 3.0 : 5.0;
+  const shippingCost = formData.caza === "North Lebanon" ? 2.0 : 3.0;
   const totalWithShipping = getTotalPrice() + shippingCost;
 
   return (
