@@ -84,15 +84,12 @@ const config = {
   ownerPhone: process.env.OWNER_PHONE || "+96181353685",
 
   // Security – allowed frontend origins (sites that can call this API)
+  // Only allow production frontend: https://perfumenectar.com
   security: {
     corsOrigins: process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
       : [
-          "http://localhost:5173",
-          "http://localhost:8080",
-          "http://localhost:3000",
           "https://perfumenectar.com",
-          "https://api.perfumenectar.com",
         ],
     apiKey: process.env.API_KEY,
     rateLimitWindow:

@@ -30,33 +30,32 @@ const app = express();
 app.set("trust proxy", 1);
 
 // CORS origins configuration (defined early for use in OPTIONS handler)
+// Only allow requests from the production frontend
 const corsOrigins = [
-  "http://localhost:8080",
   "https://perfumenectar.com",
-  "https://www.perfumenectar.com",
-  "https://api.perfumenectar.com",
 ];
 
 // CORS origin validation function
+// Only allows exact match for https://perfumenectar.com
 const corsOriginValidator = (origin) => {
-  if (!origin) return true; // Allow requests with no origin
+  if (!origin) return false; // Require origin header for browser requests
   
   const normalizedOrigin = origin.replace(/\/$/, "").toLowerCase();
+  const normalizedAllowed = corsOrigins[0].replace(/\/$/, "").toLowerCase();
   
-  return corsOrigins.some(allowed => {
-    const normalizedAllowed = allowed.replace(/\/$/, "").toLowerCase();
-    if (normalizedOrigin === normalizedAllowed) return true;
-    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\//, "https://www.")) return true;
-    if (normalizedOrigin === normalizedAllowed.replace(/^https:\/\/www\./, "https://")) return true;
-    return false;
-  });
+  // Exact match only - no www variants or other domains
+  return normalizedOrigin === normalizedAllowed;
 };
 
 // Handle OPTIONS preflight requests FIRST - before any other middleware
 // This ensures CORS preflight requests always get proper headers
 // CRITICAL: Must return exact origin (not *) when credentials: true
+// This MUST be before any middleware to catch OPTIONS requests immediately
 app.options("*", (req, res) => {
   const origin = req.headers.origin;
+  
+  // Log preflight request for debugging
+  logger.info(`OPTIONS preflight request: ${req.path} from origin: ${origin || 'none'}`);
   
   // If no origin, allow but don't set CORS headers (non-browser request)
   if (!origin) {
@@ -73,10 +72,12 @@ app.options("*", (req, res) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Max-Age", "86400");
+    logger.info(`✅ OPTIONS preflight allowed for origin: ${origin}`);
     res.status(204).end();
   } else {
     // Origin not allowed - don't set CORS headers, browser will block
-    console.warn(`⚠️  CORS preflight blocked for origin: ${origin}`);
+    logger.warn(`⚠️  CORS preflight blocked for origin: ${origin}`);
+    logger.warn(`   Allowed origins: ${corsOrigins.join(", ")}`);
     res.status(403).end();
   }
 });
@@ -129,8 +130,12 @@ const corsOriginValidatorCallback = (origin, callback) => {
 
 // CORS configuration object (reusable)
 // IMPORTANT: origin must return exact origin string (not true/*) when credentials: true
+// This configuration ensures:
+// 1. OPTIONS preflight requests get proper headers
+// 2. Exact origin is returned (not *) when credentials: true
+// 3. All routes get CORS headers including error responses
 const corsConfig = {
-  origin: corsOriginValidatorCallback,
+  origin: corsOriginValidatorCallback, // Returns exact origin string, not *
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
@@ -142,9 +147,9 @@ const corsConfig = {
     "Access-Control-Request-Headers",
   ],
   exposedHeaders: ["Content-Type", "Authorization"],
-  credentials: true, // When true, origin MUST be exact string, not *
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
+  credentials: true, // CRITICAL: When true, origin MUST be exact string, not *
+  preflightContinue: false, // Don't continue to next middleware for OPTIONS
+  optionsSuccessStatus: 204, // Return 204 for OPTIONS (some clients expect this)
   maxAge: 86400, // Cache preflight requests for 24 hours
 };
 
