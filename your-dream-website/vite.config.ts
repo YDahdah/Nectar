@@ -78,23 +78,49 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // React core - most critical, should be cached longest
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('react/jsx-runtime')) {
             return 'react-vendor';
           }
+          // Router - used across all routes
           if (id.includes('node_modules/react-router') || id.includes('node_modules/@remix-run')) {
             return 'router';
           }
-          if (id.includes('node_modules/framer-motion')) {
-            return 'framer-motion';
+          // React Query - data fetching library
+          if (id.includes('node_modules/@tanstack/react-query')) {
+            return 'react-query';
           }
-          if (id.includes('node_modules/lucide-react')) {
-            return 'lucide';
-          }
+          // UI libraries - split by usage frequency
           if (id.includes('node_modules/radix-ui') || id.includes('@radix-ui')) {
             return 'radix-ui';
           }
-          if (id.includes('node_modules/@tanstack/react-query')) {
-            return 'react-query';
+          // Animation library - can be lazy loaded
+          if (id.includes('node_modules/framer-motion')) {
+            return 'framer-motion';
+          }
+          // Icons - large library, lazy load
+          if (id.includes('node_modules/lucide-react')) {
+            return 'lucide';
+          }
+          // Form libraries - used in checkout
+          if (id.includes('node_modules/react-hook-form') || id.includes('node_modules/@hookform')) {
+            return 'forms';
+          }
+          // Validation library
+          if (id.includes('node_modules/zod')) {
+            return 'validation';
+          }
+          // Date utilities
+          if (id.includes('node_modules/date-fns')) {
+            return 'date-utils';
+          }
+          // Charts - only used in admin/dashboard
+          if (id.includes('node_modules/recharts')) {
+            return 'charts';
+          }
+          // Other vendor libraries
+          if (id.includes('node_modules')) {
+            return 'vendor';
           }
         },
         chunkFileNames: "assets/js/[name]-[hash].js",

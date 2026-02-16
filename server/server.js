@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import morgan from "morgan";
+import compression from "compression";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import config from "./config/config.js";
@@ -13,6 +14,7 @@ import {
   requestSizeLimit,
 } from "./middleware/security.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import performanceMiddleware, { getMetrics } from "./middleware/performance.js";
 
 // Import routes
 import orderRoutes from "./routes/orderRoutes.js";
@@ -88,6 +90,19 @@ app.use(
 // Security middleware
 // app.options("*", corsMiddleware);
 app.use(helmetMiddleware);
+// Compression middleware - compress responses to reduce bandwidth
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression for all other responses
+    return compression.filter(req, res);
+  },
+  level: 6, // Compression level (1-9, 6 is a good balance)
+  threshold: 1024, // Only compress responses larger than 1KB
+}));
 app.use(rateLimiter);
 app.use(requestSizeLimit("10mb"));
 
@@ -128,6 +143,9 @@ app.get("/api", (req, res) => {
   });
 });
 
+// Performance monitoring middleware (after security, before routes)
+app.use(performanceMiddleware);
+
 // Additional health check endpoint with more details (after middleware)
 app.get("/health/detailed", (req, res) => {
   res.json({
@@ -136,6 +154,15 @@ app.get("/health/detailed", (req, res) => {
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
   });
+});
+
+// Metrics endpoint for monitoring
+app.get("/metrics", (req, res) => {
+  // Optional: Add authentication for metrics endpoint in production
+  if (process.env.NODE_ENV === "production" && req.headers["x-api-key"] !== process.env.METRICS_API_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  res.json(getMetrics());
 });
 
 // API routes

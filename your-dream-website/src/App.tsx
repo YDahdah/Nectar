@@ -54,6 +54,16 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 5 * 60 * 1000, // 5 minutes
       gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
+      refetchOnWindowFocus: false, // Prevent unnecessary refetches
+      refetchOnReconnect: true, // Refetch on reconnect
+      retry: 2, // Retry failed requests twice
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+      // Enable request deduplication (default behavior, but explicit is better)
+      structuralSharing: true,
+    },
+    mutations: {
+      retry: 1, // Retry mutations once
+      retryDelay: 1000,
     },
   },
 });

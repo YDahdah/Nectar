@@ -7,7 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Filter } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Filter, X } from "lucide-react";
 
 export type GenderFilter = "men" | "women" | "mix" | "all";
 
@@ -33,65 +35,142 @@ const ShopSidebar = ({
 
   const availableBrands = useMemo(() => {
     const { products: list } = getProductList({ gender: selectedGender });
-    const brands = new Set<string>();
+    // Count products per brand
+    const brandCounts = new Map<string, number>();
     list.forEach((product) => {
-      brands.add(getBrandFromName(product.name));
+      const brand = getBrandFromName(product.name);
+      brandCounts.set(brand, (brandCounts.get(brand) || 0) + 1);
     });
-    return Array.from(brands).sort();
+    // Filter out brands with 1 or fewer products
+    return Array.from(brandCounts.entries())
+      .filter(([_, count]) => count > 1)
+      .map(([brand]) => brand)
+      .sort();
   }, [selectedGender]);
+
+  const hasActiveFilters = selectedGender !== "all" || selectedBrand;
+
+  const getGenderLabel = (gender: GenderFilter) => {
+    return menuItems.find((item) => item.id === gender)?.label || "All fragrances";
+  };
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Filter className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="text-sm font-medium">Filters</span>
+      {/* Filter Container */}
+      <div className="rounded-lg border border-border bg-card p-4 sm:p-5 shadow-sm">
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent/10">
+              <Filter className="h-4 w-4 text-accent" aria-hidden />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Filter Products</h3>
+              <p className="text-xs text-muted-foreground">Refine your search</p>
+            </div>
+          </div>
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onGenderChange("all");
+                onBrandChange(null);
+              }}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all
+            </Button>
+          )}
         </div>
 
-        <Select
-          value={selectedGender}
-          onValueChange={(value) => onGenderChange(value as GenderFilter)}
-        >
-          <SelectTrigger className="w-[180px] border-border bg-background text-sm">
-            <SelectValue placeholder="Collection" />
-          </SelectTrigger>
-          <SelectContent>
-            {menuItems.map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Filter Controls */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          {/* Collection Filter */}
+          <div className="flex-1 space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Collection
+            </label>
+            <Select
+              value={selectedGender}
+              onValueChange={(value) => onGenderChange(value as GenderFilter)}
+            >
+              <SelectTrigger className="h-11 w-full border-border bg-background text-sm transition-all hover:border-accent/50 focus:border-accent">
+                <SelectValue placeholder="Select collection" />
+              </SelectTrigger>
+              <SelectContent>
+                {menuItems.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-        <Select
-          value={selectedBrand ?? "all"}
-          onValueChange={(value) => onBrandChange(value === "all" ? null : value)}
-        >
-          <SelectTrigger className="w-[180px] border-border bg-background text-sm">
-            <SelectValue placeholder="Brand" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All brands</SelectItem>
-            {availableBrands.map((brand) => (
-              <SelectItem key={brand} value={brand}>
-                {brand}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {/* Brand Filter */}
+          <div className="flex-1 space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Brand
+            </label>
+            <Select
+              value={selectedBrand ?? "all"}
+              onValueChange={(value) => onBrandChange(value === "all" ? null : value)}
+            >
+              <SelectTrigger className="h-11 w-full border-border bg-background text-sm transition-all hover:border-accent/50 focus:border-accent">
+                <SelectValue placeholder="Select brand" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All brands</SelectItem>
+                {availableBrands.map((brand) => (
+                  <SelectItem key={brand} value={brand}>
+                    {brand}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-        {(selectedGender !== "all" || selectedBrand) && (
-          <button
-            type="button"
-            onClick={() => {
-              onGenderChange("all");
-              onBrandChange(null);
-            }}
-            className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            Clear filters
-          </button>
+        {/* Active Filters Display */}
+        {hasActiveFilters && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+            <span className="text-xs font-medium text-muted-foreground">Active filters:</span>
+            {selectedGender !== "all" && (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 px-2.5 py-1 text-xs font-medium"
+              >
+                {getGenderLabel(selectedGender)}
+                <button
+                  type="button"
+                  onClick={() => onGenderChange("all")}
+                  className="ml-1 rounded-full hover:bg-secondary-foreground/20"
+                  aria-label={`Remove ${getGenderLabel(selectedGender)} filter`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {selectedBrand && (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 px-2.5 py-1 text-xs font-medium"
+              >
+                {selectedBrand}
+                <button
+                  type="button"
+                  onClick={() => onBrandChange(null)}
+                  className="ml-1 rounded-full hover:bg-secondary-foreground/20"
+                  aria-label={`Remove ${selectedBrand} filter`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+          </div>
         )}
       </div>
     </div>

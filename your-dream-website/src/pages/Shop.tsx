@@ -12,6 +12,7 @@ import { useShop } from "@/contexts/ShopContext";
 import { getProductList, getBrandFromName, type Product } from "@/api/products";
 import { SHOP_PAGE_SIZE } from "@/constants";
 import { Button } from "@/components/ui/button";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 
 // Fisher-Yates shuffle algorithm for randomizing array
 const shuffleArray = <T,>(array: T[]): T[] => {
@@ -65,8 +66,19 @@ const Shop = () => {
   );
   const hasMore = filteredProducts.length > visibleCount;
   const loadMore = useCallback(() => {
-    setVisibleCount((prev) => prev + SHOP_PAGE_SIZE);
-  }, []);
+    if (!isLoading && hasMore) {
+      setVisibleCount((prev) => prev + SHOP_PAGE_SIZE);
+    }
+  }, [isLoading, hasMore]);
+
+  // Infinite scroll hook for automatic loading
+  const { observerRef } = useInfiniteScroll({
+    loadMore,
+    hasMore,
+    isLoading,
+    rootMargin: "400px", // Start loading when 400px from bottom
+    enabled: true,
+  });
 
   const pageTitle = useMemo(() => {
     const genderText = selectedGender === "all" 
@@ -167,17 +179,22 @@ const Shop = () => {
                         />
                       ))}
                     </div>
+                    {/* Infinite scroll sentinel - triggers loadMore when visible */}
                     {hasMore && (
-                      <div className="mt-10 flex justify-center">
-                        <Button
-                          variant="outline"
-                          size="lg"
-                          onClick={loadMore}
-                          className="min-w-[200px]"
-                        >
-                          Load more ({filteredProducts.length - visibleCount} left)
-                        </Button>
-                      </div>
+                      <>
+                        <div ref={observerRef} className="h-1 w-full" aria-hidden="true" />
+                        <div className="mt-10 flex justify-center">
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={loadMore}
+                            className="min-w-[200px]"
+                            disabled={isLoading}
+                          >
+                            {isLoading ? "Loading..." : `Load more (${filteredProducts.length - visibleCount} left)`}
+                          </Button>
+                        </div>
+                      </>
                     )}
                   </>
                 ) : (
