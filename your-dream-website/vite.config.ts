@@ -69,10 +69,12 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: "esnext",
-    minify: "esbuild",
+    minify: "esbuild", // Fastest minifier
     cssMinify: true,
-    sourcemap: false, // Disable source maps in production
+    sourcemap: false, // Disable source maps in production for smaller bundles
     assetsInlineLimit: 4096, // Inline small assets (< 4kb) as base64
+    // Optimize chunk size for better loading performance
+    chunkSizeWarningLimit: 500, // Warn if chunks exceed 500kb
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true,
@@ -80,9 +82,20 @@ export default defineConfig(({ mode }) => ({
     // Ensure proper module resolution for React
     modulePreload: {
       polyfill: true,
+      resolveDependencies: (filename, deps) => {
+        // Preload critical dependencies
+        return deps.filter(dep => {
+          // Preload React and router chunks
+          return dep.includes('react-vendor') || dep.includes('router');
+        });
+      },
     },
+    // Enable compression reporting
+    reportCompressedSize: true,
+    // Optimize rollup output
     rollupOptions: {
       output: {
+        // Optimize chunk splitting for better caching
         manualChunks(id) {
           // Order matters: check specific chunks first before falling back to vendor
           
@@ -127,6 +140,18 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('node_modules/recharts')) {
             return 'charts';
           }
+          // Split large vendor chunks further for better caching
+          if (id.includes('node_modules')) {
+            // Split by package name for better cache invalidation
+            const match = id.match(/node_modules\/([^/]+)/);
+            if (match) {
+              const packageName = match[1];
+              // Keep small packages together
+              if (['clsx', 'tailwind-merge', 'class-variance-authority'].includes(packageName)) {
+                return 'utils';
+              }
+            }
+          }
           // Other vendor libraries - only if not already matched above
           // This prevents circular dependencies by ensuring specific chunks are checked first
         },
@@ -145,9 +170,6 @@ export default defineConfig(({ mode }) => ({
         },
       },
     },
-    chunkSizeWarningLimit: 1000,
-    // Enable compression
-    reportCompressedSize: true,
   },
   optimizeDeps: {
     include: [

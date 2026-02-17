@@ -1,9 +1,11 @@
+/* Font loading optimized: use font-display: swap for better performance */
+/* Fonts are loaded asynchronously via preload in index.html */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600&family=Dancing+Script:wght@400;500;600;700&display=swap');
 
-/* Optimize font loading */
+/* Optimize font loading - swap ensures text is visible immediately */
 @font-face {
   font-family: 'Playfair Display';
-  font-display: swap;
+  font-display: swap; /* Show fallback font immediately, swap when custom font loads */
 }
 
 @font-face {

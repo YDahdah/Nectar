@@ -1,11 +1,12 @@
 // Service Worker for advanced caching strategies
-const CACHE_VERSION = "v2";
+// Optimized for fast loading and scalability
+const CACHE_VERSION = "v3"; // Increment on major changes
 const CACHE_NAME = `nectar-perfume-${CACHE_VERSION}`;
 const STATIC_CACHE = `nectar-static-${CACHE_VERSION}`;
 const API_CACHE = `nectar-api-${CACHE_VERSION}`;
 const IMAGE_CACHE = `nectar-images-${CACHE_VERSION}`;
 
-// Static assets to cache on install
+// Static assets to cache on install (critical for fast first load)
 const STATIC_ASSETS = [
   "/",
   "/shop",
@@ -14,9 +15,16 @@ const STATIC_ASSETS = [
 
 // Cache duration settings (in milliseconds)
 const CACHE_DURATIONS = {
-  static: 7 * 24 * 60 * 60 * 1000, // 7 days
-  api: 5 * 60 * 1000, // 5 minutes
-  image: 30 * 24 * 60 * 60 * 1000, // 30 days
+  static: 7 * 24 * 60 * 60 * 1000, // 7 days - static assets rarely change
+  api: 5 * 60 * 1000, // 5 minutes - API responses
+  image: 30 * 24 * 60 * 60 * 1000, // 30 days - images are immutable
+};
+
+// Maximum cache size limits (in MB)
+const MAX_CACHE_SIZES = {
+  static: 50, // 50MB for static assets
+  api: 10, // 10MB for API responses
+  image: 100, // 100MB for images
 };
 
 // Install event - cache static assets
@@ -87,29 +95,47 @@ function getCacheName(request) {
 }
 
 /**
- * Stale-while-revalidate strategy
+ * Stale-while-revalidate strategy (optimized for performance)
  * Returns cached response immediately, then updates cache in background
+ * This provides instant loading while keeping content fresh
  */
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cachedResponse = await cache.match(request);
 
-  // Fetch fresh response in background
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      // Only cache successful responses
-      if (response && response.status === 200 && response.type === "basic") {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => {
-      // If fetch fails, return cached response if available
-      return cachedResponse;
-    });
+  // Return cached response immediately for instant loading
+  if (cachedResponse) {
+    // Fetch fresh response in background (don't await)
+    fetch(request)
+      .then((response) => {
+        // Only cache successful responses
+        if (response && response.status === 200 && response.type === "basic") {
+          // Clone response before caching (responses can only be read once)
+          cache.put(request, response.clone()).catch((err) => {
+            console.warn("Failed to update cache:", err);
+          });
+        }
+      })
+      .catch(() => {
+        // Network failed, keep using cached version
+        // This is fine - cached response is already returned
+      });
+    
+    return cachedResponse;
+  }
 
-  // Return cached response immediately if available, otherwise wait for network
-  return cachedResponse || fetchPromise;
+  // No cache, wait for network
+  try {
+    const response = await fetch(request);
+    if (response && response.status === 200 && response.type === "basic") {
+      cache.put(request, response.clone()).catch((err) => {
+        console.warn("Failed to cache response:", err);
+      });
+    }
+    return response;
+  } catch (error) {
+    throw error;
+  }
 }
 
 /**
@@ -192,17 +218,24 @@ self.addEventListener("fetch", (event) => {
         });
       }
       
-      // Images: Cache-first with stale-while-revalidate
+      // Images: Cache-first with stale-while-revalidate for instant loading
       if (event.request.destination === "image" || 
           url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i)) {
         return staleWhileRevalidate(event.request, cacheName);
       }
       
-      // Static assets (HTML, CSS, JS): Stale-while-revalidate
-      if (url.pathname.match(/\.(html|css|js|woff2|woff|ttf|eot)$/i) ||
+      // Static assets (HTML, CSS, JS, fonts): Stale-while-revalidate
+      // This provides instant loading while keeping assets fresh
+      if (url.pathname.match(/\.(html|css|js|mjs|woff2|woff|ttf|eot)$/i) ||
           event.request.destination === "style" ||
-          event.request.destination === "script") {
+          event.request.destination === "script" ||
+          event.request.destination === "font") {
         return staleWhileRevalidate(event.request, cacheName);
+      }
+      
+      // Root path and routes: Network-first for fresh content
+      if (url.pathname === "/" || !url.pathname.includes(".")) {
+        return networkFirst(event.request, cacheName);
       }
       
       // Default: Network-first

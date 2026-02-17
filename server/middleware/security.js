@@ -1,8 +1,37 @@
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import RedisStore from "rate-limit-redis";
 import config from "../config/config.js";
 import logger from "../utils/logger.js";
+import { redisClient, redisAvailable } from "./cache.js";
+
+/**
+ * Get Redis store for rate limiting if available, otherwise use memory store
+ * This ensures distributed rate limiting across multiple instances
+ * Note: Redis client initialization is async, so we check availability at store creation time
+ */
+function getRateLimitStore(prefix) {
+  // Check if Redis is available (may be false if Redis is still initializing or unavailable)
+  if (redisAvailable && redisClient) {
+    try {
+      const store = new RedisStore({
+        client: redisClient,
+        prefix: `rl:${prefix}:`,
+        // Send command to Redis to ensure connection is ready
+        sendCommand: (...args) => redisClient.sendCommand(args),
+      });
+      logger.info(`Using Redis store for rate limiting: ${prefix}`);
+      return store;
+    } catch (error) {
+      logger.warn(`Failed to create Redis store for rate limiting, using memory store: ${error.message}`);
+    }
+  } else {
+    logger.debug(`Redis not available for rate limiting (${prefix}), using memory store`);
+  }
+  // Fallback to memory store if Redis is not available
+  return undefined; // undefined means use default memory store
+}
 
 /**
  * CORS configuration – allow all origins (required for browser requests from other origins).
@@ -18,9 +47,12 @@ export const corsMiddleware = cors({
 
 /**
  * Rate limiting middleware
+ * Uses Redis store if available for distributed rate limiting across instances
+ * Falls back to memory store if Redis is unavailable
  * Skip OPTIONS requests (CORS preflight) to avoid blocking them
  */
 export const rateLimiter = rateLimit({
+  store: getRateLimitStore("general"),
   windowMs: config.security.rateLimitWindow,
   max: config.security.rateLimitMax,
   skip: (req) => req.method === "OPTIONS", // Skip preflight requests
@@ -41,9 +73,11 @@ export const rateLimiter = rateLimit({
 
 /**
  * Strict rate limiter for checkout endpoint
+ * Uses Redis store if available for distributed rate limiting across instances
  * Skip OPTIONS requests (CORS preflight) to avoid blocking them
  */
 export const checkoutRateLimiter = rateLimit({
+  store: getRateLimitStore("checkout"),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 orders per 15 minutes
   skip: (req) => req.method === "OPTIONS", // Skip preflight requests
@@ -64,9 +98,11 @@ export const checkoutRateLimiter = rateLimit({
 
 /**
  * Rate limiter for newsletter signup
+ * Uses Redis store if available for distributed rate limiting across instances
  * Skip OPTIONS requests (CORS preflight) to avoid blocking them
  */
 export const newsletterRateLimiter = rateLimit({
+  store: getRateLimitStore("newsletter"),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // 10 signups per 15 minutes per IP
   skip: (req) => req.method === "OPTIONS", // Skip preflight requests

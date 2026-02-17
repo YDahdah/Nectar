@@ -1,11 +1,12 @@
 # Settings for Backend (on Cloud Run).
 # See https://firebase.google.com/docs/app-hosting/configure#cloud-run
+# Optimized for scalability: keeps at least 1 instance warm, scales up to 10 instances
 runConfig:
-  minInstances: 0
-  # maxInstances: 100
-  # concurrency: 80
-  # cpu: 1
-  # memoryMiB: 512
+  minInstances: 1  # Keep at least 1 instance warm to avoid cold starts
+  maxInstances: 10  # Scale up to 10 instances for high traffic (800 concurrent users)
+  concurrency: 80  # 80 concurrent requests per instance
+  cpu: 2  # Increased CPU for better performance
+  memoryMiB: 1024  # 1GB memory for better performance
 
 # Environment variables and secrets.
 # env:

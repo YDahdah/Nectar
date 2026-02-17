@@ -54,10 +54,10 @@ async function createPool() {
   
   const poolConfig = {
     // Minimum connections: Keep some connections warm for faster response
-    min: parseInt(process.env.DB_POOL_MIN || (isProduction ? "5" : "2"), 10),
+    min: parseInt(process.env.DB_POOL_MIN || (isProduction ? "10" : "2"), 10),
     // Maximum connections: Scale based on environment
-    // Production: Higher limit for handling more concurrent requests
-    max: parseInt(process.env.DB_POOL_MAX || (isProduction ? "20" : "10"), 10),
+    // Production: Higher limit for handling more concurrent requests (increased from 20 to 50)
+    max: parseInt(process.env.DB_POOL_MAX || (isProduction ? "50" : "10"), 10),
     // Idle timeout: Close idle connections after 30 seconds
     idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || "30000", 10),
     // Connection timeout: Fail fast if can't connect within 5 seconds
