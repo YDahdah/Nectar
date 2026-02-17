@@ -266,21 +266,21 @@ const ProductDetail = ({ product }: ProductDetailProps) => {
               <label 
                 id="size-label"
                 className="block text-sm font-medium text-gray-700 mb-2"
-                htmlFor="size-selector"
+                htmlFor="size-selector-first"
               >
                 Size
               </label>
               <div 
-                id="size-selector"
                 className="flex flex-wrap gap-3"
                 role="radiogroup"
                 aria-labelledby="size-label"
               >
-                {displaySizes.map((size) => {
+                {displaySizes.map((size, index) => {
                   const isSelected = selectedSize === size;
                   return (
                     <button
                       key={size}
+                      id={index === 0 ? "size-selector-first" : undefined}
                       onClick={() => setSelectedSize(size)}
                       onKeyDown={(e) => handleSizeKeyDown(e, size)}
                       className={`px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-medium transition-all rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 ${
@@ -305,18 +305,18 @@ const ProductDetail = ({ product }: ProductDetailProps) => {
               <label 
                 id="quantity-label"
                 className="block text-sm font-medium text-gray-700 mb-2"
-                htmlFor="quantity-selector"
+                htmlFor="quantity-selector-decrease"
               >
                 Quantity
               </label>
               <div className="flex items-center gap-4">
                 <div 
-                  id="quantity-selector"
                   className="flex items-center gap-3 border border-gray-300 rounded-lg"
                   role="group"
                   aria-labelledby="quantity-label"
                 >
                   <button
+                    id="quantity-selector-decrease"
                     onClick={handleDecreaseQuantity}
                     onKeyDown={(e) => handleQuantityKeyDown(e, 'decrease')}
                     className="p-2 hover:bg-gray-100 transition-colors rounded-l-lg focus:outline-none focus:ring-2 focus:ring-accent focus:ring-inset"

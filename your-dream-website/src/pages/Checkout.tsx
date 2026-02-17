@@ -605,7 +605,7 @@ const Checkout = () => {
                 <p className="text-sm text-muted-foreground">All transactions are secure and encrypted.</p>
                 <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
                   <div className="border border-border rounded-md bg-card">
-                    <label className="flex items-center p-4 cursor-pointer hover:bg-muted/50">
+                    <label htmlFor="cod" className="flex items-center p-4 cursor-pointer hover:bg-muted/50">
                       <RadioGroupItem value="cod" id="cod" className="mr-3" />
                       <span className="text-sm text-card-foreground">Cash on Delivery (COD)</span>
                     </label>
