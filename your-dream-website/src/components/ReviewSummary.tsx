@@ -297,9 +297,10 @@ const ReviewSummary = () => {
                     <StarRatingSelector id="rating-empty" rating={rating} onRatingChange={setRating} />
                   </div>
                     <div className="space-y-2">
-                    <Label htmlFor="author-empty" className="text-sm font-medium">Your Name (Optional)</Label>
+                    <p className="text-sm font-medium">Your Name (Optional)</p>
                     <Input
                       id="author-empty"
+                      aria-label="Your Name (Optional)"
                       value={author}
                       onChange={(e) => setAuthor(e.target.value)}
                       placeholder="Enter your name"
@@ -307,9 +308,10 @@ const ReviewSummary = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="comment-empty" className="text-sm font-medium">Your Review (Optional)</Label>
+                    <p className="text-sm font-medium">Your Review (Optional)</p>
                     <Textarea
                       id="comment-empty"
+                      aria-label="Your Review (Optional)"
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       placeholder="Share your thoughts..."
@@ -318,7 +320,7 @@ const ReviewSummary = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="photo-input-empty" className="text-sm font-medium">Upload Photo (Optional)</Label>
+                    <p className="text-sm font-medium">Upload Photo (Optional)</p>
                     <div className="space-y-3">
                       <input
                         id="photo-input-empty"
@@ -345,9 +347,11 @@ const ReviewSummary = () => {
                           </button>
                         </div>
                       ) : (
-                        <label
-                          htmlFor="photo-input-empty"
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefEmpty.current?.click()}
                           className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[hsl(var(--border))] rounded-xl cursor-pointer hover:bg-[hsl(var(--muted))]/50 hover:border-[hsl(var(--accent))]/50 transition-colors"
+                          aria-label="Upload photo"
                         >
                           <div className="flex flex-col items-center justify-center pt-5 pb-6">
                             <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
@@ -356,7 +360,7 @@ const ReviewSummary = () => {
                             </p>
                             <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 5MB</p>
                           </div>
-                        </label>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -473,9 +477,10 @@ const ReviewSummary = () => {
                     <StarRatingSelector id="rating" rating={rating} onRatingChange={setRating} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="author" className="text-sm font-medium">Your Name (Optional)</Label>
+                    <p className="text-sm font-medium">Your Name (Optional)</p>
                     <Input
                       id="author"
+                      aria-label="Your Name (Optional)"
                       value={author}
                       onChange={(e) => setAuthor(e.target.value)}
                       placeholder="Enter your name"
@@ -483,9 +488,10 @@ const ReviewSummary = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="comment" className="text-sm font-medium">Your Review (Optional)</Label>
+                    <p className="text-sm font-medium">Your Review (Optional)</p>
                     <Textarea
                       id="comment"
+                      aria-label="Your Review (Optional)"
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       placeholder="Share your thoughts..."
@@ -494,7 +500,7 @@ const ReviewSummary = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="photo-input" className="text-sm font-medium">Upload Photo (Optional)</Label>
+                    <p className="text-sm font-medium">Upload Photo (Optional)</p>
                     <div className="space-y-3">
                       <input
                         id="photo-input"
@@ -521,9 +527,11 @@ const ReviewSummary = () => {
                           </button>
                         </div>
                       ) : (
-                        <label
-                          htmlFor="photo-input"
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
                           className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[hsl(var(--border))] rounded-xl cursor-pointer hover:bg-[hsl(var(--muted))]/50 hover:border-[hsl(var(--accent))]/50 transition-colors"
+                          aria-label="Upload photo"
                         >
                           <div className="flex flex-col items-center justify-center pt-5 pb-6">
                             <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
@@ -532,7 +540,7 @@ const ReviewSummary = () => {
                             </p>
                             <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 5MB</p>
                           </div>
-                        </label>
+                        </button>
                       )}
                     </div>
                   </div>
