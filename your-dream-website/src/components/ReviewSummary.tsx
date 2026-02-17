@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Check, Upload, X, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Check, Upload, X, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { useReviews } from "@/contexts/ReviewsContext";
@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { isAdmin } from "@/utils/admin";
 
 // Star icon component - uses brand gold
 const Star = ({ filled, size = "default" }: { filled: boolean; size?: "default" | "sm" }) => {
@@ -65,7 +66,7 @@ const StarRatingSelector = ({
 };
 
 const ReviewSummary = () => {
-  const { reviews, getOverallRating, getRatingBreakdown, getTotalReviews, addReview } = useReviews();
+  const { reviews, getOverallRating, getRatingBreakdown, getTotalReviews, addReview, deleteReview } = useReviews();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [rating, setRating] = useState(0);
@@ -76,6 +77,37 @@ const ReviewSummary = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRefEmpty = useRef<HTMLInputElement>(null);
   const [showAllReviews, setShowAllReviews] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
+
+  // Listen for admin mode changes
+  useEffect(() => {
+    setAdminMode(isAdmin());
+    
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'nectar_admin') {
+        setAdminMode(isAdmin());
+      }
+    };
+    
+    // Also listen for custom events (for same-tab changes)
+    const handleAdminToggle = () => {
+      setAdminMode(isAdmin());
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('adminModeChanged', handleAdminToggle);
+    
+    // Check periodically for changes (fallback for same-tab changes)
+    const interval = setInterval(() => {
+      setAdminMode(isAdmin());
+    }, 500);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('adminModeChanged', handleAdminToggle);
+      clearInterval(interval);
+    };
+  }, []);
 
   const overallRating = getOverallRating();
   const totalReviews = getTotalReviews();
@@ -184,6 +216,16 @@ const ReviewSummary = () => {
       title: "Review Submitted",
       description: "Thank you for your review!",
     });
+  };
+
+  const handleDeleteReview = (reviewId: string) => {
+    if (window.confirm("Are you sure you want to delete this review?")) {
+      deleteReview(reviewId);
+      toast({
+        title: "Review Deleted",
+        description: "The review has been removed.",
+      });
+    }
   };
 
   // Empty state when no reviews
@@ -505,8 +547,19 @@ const ReviewSummary = () => {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: Math.min(index, 5) * 0.05 }}
-                  className="rounded-2xl border border-[hsl(var(--border))] bg-white p-5 sm:p-6 shadow-sm"
+                  className="rounded-2xl border border-[hsl(var(--border))] bg-white p-5 sm:p-6 shadow-sm relative"
                 >
+                  {adminMode && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteReview(review.id)}
+                      className="absolute top-4 right-4 text-muted-foreground hover:text-destructive p-2 h-auto"
+                      aria-label="Delete review"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                   <div className="flex gap-4">
                     <div className="shrink-0 w-10 h-10 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center font-serif text-sm font-medium text-foreground">
                       {(review.author || "A").charAt(0).toUpperCase()}

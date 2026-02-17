@@ -13,6 +13,7 @@ export interface Review {
 interface ReviewsContextType {
   reviews: Review[];
   addReview: (rating: number, comment?: string, author?: string, photo?: string) => void;
+  deleteReview: (reviewId: string) => void;
   getOverallRating: () => number;
   getRatingBreakdown: () => { stars: number; count: number; percentage: number }[];
   getTotalReviews: () => number;
@@ -80,6 +81,10 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
     setReviews((prev) => [...prev, newReview]);
   };
 
+  const deleteReview = (reviewId: string) => {
+    setReviews((prev) => prev.filter((review) => review.id !== reviewId));
+  };
+
   const getOverallRating = (): number => {
     if (reviews.length === 0) return 0;
     const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
@@ -104,6 +109,7 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
       value={{
         reviews,
         addReview,
+        deleteReview,
         getOverallRating,
         getRatingBreakdown,
         getTotalReviews,
