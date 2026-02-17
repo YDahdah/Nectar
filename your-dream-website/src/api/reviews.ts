@@ -1,15 +1,9 @@
 import { API_BASE } from "@/lib/config";
 import type { Review } from "@/contexts/ReviewsContext";
 
-// Use relative URL in development (to use Vite proxy) or full URL in production
-const getApiUrl = (path: string): string => {
-  // In development, use relative URL to leverage Vite proxy
-  if (import.meta.env.DEV) {
-    return `/api${path}`;
-  }
-  // In production, use full API_BASE URL
-  return `${API_BASE}/api${path}`;
-};
+// Always use the configured backend URL so all clients hit the same API.
+// This avoids split data between dev proxy and production API.
+const getApiUrl = (path: string): string => `${API_BASE}/api${path}`;
 
 export interface CreateReviewData {
   rating: number;
