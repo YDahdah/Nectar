@@ -50,7 +50,7 @@ export interface DeleteReviewResponse {
 export async function fetchReviews(): Promise<Review[]> {
   try {
     const url = getApiUrl("/reviews");
-    console.log("Fetching reviews from:", url);
+    console.log("[Reviews API] GET", url);
     
     const response = await fetch(url, {
       method: "GET",
@@ -66,7 +66,7 @@ export async function fetchReviews(): Promise<Review[]> {
     }
 
     const data: ReviewsResponse = await response.json();
-    console.log("Fetched reviews from server:", data.reviews.length);
+    console.log("[Reviews API] Fetched", data.reviews.length, "reviews");
     
     // Convert date strings to Date objects
     return data.reviews.map((review) => ({
@@ -86,7 +86,7 @@ export async function fetchReviews(): Promise<Review[]> {
 export async function createReview(reviewData: CreateReviewData): Promise<Review> {
   try {
     const url = getApiUrl("/reviews");
-    console.log("Creating review at:", url, reviewData);
+    console.log("[Reviews API] POST", url, reviewData);
     
     const response = await fetch(url, {
       method: "POST",
@@ -104,7 +104,7 @@ export async function createReview(reviewData: CreateReviewData): Promise<Review
     }
 
     const data: CreateReviewResponse = await response.json();
-    console.log("Review created successfully:", data.review);
+    console.log("[Reviews API] ✅ Review created:", data.review.id);
     
     // Convert date string to Date object
     return {

@@ -45,17 +45,20 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
 
   // Load reviews from API on mount
   useEffect(() => {
+    // Visible log so you can confirm reviews code is running
+    console.log("[Reviews] Loading reviews from API...");
+    
     const loadReviews = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const loadedReviews = await fetchReviews();
-        console.log("✅ Loaded reviews from server:", loadedReviews.length);
+        console.log("[Reviews] ✅ Loaded from server:", loadedReviews.length, "reviews");
         setReviews(loadedReviews);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to load reviews";
-        console.error("❌ Error loading reviews from server:", errorMessage);
-        console.error("Make sure your backend server is running!");
+        console.error("[Reviews] ❌ Error loading from server:", errorMessage);
+        console.error("[Reviews] Tip: Set VITE_PROXY_TARGET in .env to your server (e.g. http://YOUR_SERVER_IP:3000) and restart npm run dev");
         setError(errorMessage);
         // Start with empty array - don't use localStorage fallback
         setReviews([]);

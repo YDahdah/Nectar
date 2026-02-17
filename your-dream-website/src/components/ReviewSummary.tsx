@@ -44,16 +44,19 @@ const Star = ({ filled, size = "default" }: { filled: boolean; size?: "default" 
 const StarRatingSelector = ({
   rating,
   onRatingChange,
+  id,
 }: {
   rating: number;
   onRatingChange: (rating: number) => void;
+  id?: string;
 }) => {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5" role="group" aria-labelledby={id ? `${id}-label` : undefined}>
       {[1, 2, 3, 4, 5].map((star) => (
         <button
           key={star}
           type="button"
+          id={star === 1 ? id : undefined}
           onClick={() => onRatingChange(star)}
           className="cursor-pointer hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--accent))] focus-visible:ring-offset-2 rounded transition-transform"
           aria-label={`Rate ${star} stars`}
@@ -290,8 +293,8 @@ const ReviewSummary = () => {
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Rating *</Label>
-                    <StarRatingSelector rating={rating} onRatingChange={setRating} />
+                    <Label id="rating-empty-label" htmlFor="rating-empty" className="text-sm font-medium">Rating *</Label>
+                    <StarRatingSelector id="rating-empty" rating={rating} onRatingChange={setRating} />
                   </div>
                     <div className="space-y-2">
                     <Label htmlFor="author-empty" className="text-sm font-medium">Your Name (Optional)</Label>
@@ -315,7 +318,7 @@ const ReviewSummary = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="photo-empty" className="text-sm font-medium">Upload Photo (Optional)</Label>
+                    <Label htmlFor="photo-input-empty" className="text-sm font-medium">Upload Photo (Optional)</Label>
                     <div className="space-y-3">
                       {photoPreview ? (
                         <div className="relative rounded-xl overflow-hidden border border-[hsl(var(--border))]">
@@ -466,8 +469,8 @@ const ReviewSummary = () => {
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Rating *</Label>
-                    <StarRatingSelector rating={rating} onRatingChange={setRating} />
+                    <Label id="rating-label" htmlFor="rating" className="text-sm font-medium">Rating *</Label>
+                    <StarRatingSelector id="rating" rating={rating} onRatingChange={setRating} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="author" className="text-sm font-medium">Your Name (Optional)</Label>
@@ -491,7 +494,7 @@ const ReviewSummary = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="photo" className="text-sm font-medium">Upload Photo (Optional)</Label>
+                    <Label htmlFor="photo-input" className="text-sm font-medium">Upload Photo (Optional)</Label>
                     <div className="space-y-3">
                       {photoPreview ? (
                         <div className="relative rounded-xl overflow-hidden border border-[hsl(var(--border))]">
