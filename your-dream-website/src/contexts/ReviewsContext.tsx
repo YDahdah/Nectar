@@ -29,6 +29,20 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Clear old localStorage data on mount (migration from localStorage to API)
+  useEffect(() => {
+    // Remove old localStorage reviews if they exist
+    try {
+      const oldStorageKey = "nectar_reviews";
+      if (typeof window !== "undefined" && localStorage.getItem(oldStorageKey)) {
+        console.log("Clearing old localStorage reviews (migrating to server storage)");
+        localStorage.removeItem(oldStorageKey);
+      }
+    } catch (err) {
+      console.warn("Could not clear old localStorage:", err);
+    }
+  }, []);
+
   // Load reviews from API on mount
   useEffect(() => {
     const loadReviews = async () => {
@@ -36,11 +50,12 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
       setError(null);
       try {
         const loadedReviews = await fetchReviews();
-        console.log("Loaded reviews from server:", loadedReviews.length);
+        console.log("✅ Loaded reviews from server:", loadedReviews.length);
         setReviews(loadedReviews);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Failed to load reviews";
-        console.error("Error loading reviews from server:", errorMessage);
+        console.error("❌ Error loading reviews from server:", errorMessage);
+        console.error("Make sure your backend server is running!");
         setError(errorMessage);
         // Start with empty array - don't use localStorage fallback
         setReviews([]);
