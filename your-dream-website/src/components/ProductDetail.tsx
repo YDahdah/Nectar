@@ -263,13 +263,12 @@ const ProductDetail = ({ product }: ProductDetailProps) => {
 
             {/* Size Selector */}
             <div className="mb-6">
-              <label 
+              <p 
                 id="size-label"
                 className="block text-sm font-medium text-gray-700 mb-2"
-                htmlFor="size-selector-first"
               >
                 Size
-              </label>
+              </p>
               <div 
                 className="flex flex-wrap gap-3"
                 role="radiogroup"
@@ -302,13 +301,12 @@ const ProductDetail = ({ product }: ProductDetailProps) => {
 
             {/* Quantity Selector */}
             <div className="mb-6">
-              <label 
+              <p 
                 id="quantity-label"
                 className="block text-sm font-medium text-gray-700 mb-2"
-                htmlFor="quantity-selector-decrease"
               >
                 Quantity
-              </label>
+              </p>
               <div className="flex items-center gap-4">
                 <div 
                   className="flex items-center gap-3 border border-gray-300 rounded-lg"

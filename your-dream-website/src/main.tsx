@@ -11,8 +11,8 @@ if (typeof window !== "undefined") {
     const message = args.join(" ");
     // Suppress Firebase Performance deprecated parameter warning
     if (
-      message.includes("feature_collector.js") &&
-      message.includes("deprecated parameters")
+      message.includes("deprecated parameters for the initialization function") ||
+      (message.includes("feature_collector") && message.includes("deprecated parameters"))
     ) {
       return; // Suppress this specific warning
     }

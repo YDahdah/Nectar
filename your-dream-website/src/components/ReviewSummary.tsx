@@ -293,7 +293,7 @@ const ReviewSummary = () => {
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                   <div className="space-y-2">
-                    <Label id="rating-empty-label" htmlFor="rating-empty" className="text-sm font-medium">Rating *</Label>
+                    <p id="rating-empty-label" className="text-sm font-medium">Rating *</p>
                     <StarRatingSelector id="rating-empty" rating={rating} onRatingChange={setRating} />
                   </div>
                     <div className="space-y-2">
@@ -320,6 +320,14 @@ const ReviewSummary = () => {
                   <div className="space-y-2">
                     <Label htmlFor="photo-input-empty" className="text-sm font-medium">Upload Photo (Optional)</Label>
                     <div className="space-y-3">
+                      <input
+                        id="photo-input-empty"
+                        ref={fileInputRefEmpty}
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                        className="hidden"
+                      />
                       {photoPreview ? (
                         <div className="relative rounded-xl overflow-hidden border border-[hsl(var(--border))]">
                           <img
@@ -348,14 +356,6 @@ const ReviewSummary = () => {
                             </p>
                             <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 5MB</p>
                           </div>
-                          <input
-                            id="photo-input-empty"
-                            ref={fileInputRefEmpty}
-                            type="file"
-                            accept="image/*"
-                            onChange={handlePhotoChange}
-                            className="hidden"
-                          />
                         </label>
                       )}
                     </div>
@@ -469,7 +469,7 @@ const ReviewSummary = () => {
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                   <div className="space-y-2">
-                    <Label id="rating-label" htmlFor="rating" className="text-sm font-medium">Rating *</Label>
+                    <p id="rating-label" className="text-sm font-medium">Rating *</p>
                     <StarRatingSelector id="rating" rating={rating} onRatingChange={setRating} />
                   </div>
                   <div className="space-y-2">
@@ -496,6 +496,14 @@ const ReviewSummary = () => {
                   <div className="space-y-2">
                     <Label htmlFor="photo-input" className="text-sm font-medium">Upload Photo (Optional)</Label>
                     <div className="space-y-3">
+                      <input
+                        id="photo-input"
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                        className="hidden"
+                      />
                       {photoPreview ? (
                         <div className="relative rounded-xl overflow-hidden border border-[hsl(var(--border))]">
                           <img
@@ -524,14 +532,6 @@ const ReviewSummary = () => {
                             </p>
                             <p className="text-xs text-muted-foreground">PNG, JPG, GIF up to 5MB</p>
                           </div>
-                          <input
-                            id="photo-input"
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handlePhotoChange}
-                            className="hidden"
-                          />
                         </label>
                       )}
                     </div>

@@ -90,14 +90,18 @@ const ShopSidebar = ({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {/* Collection Filter */}
           <div className="flex-1 space-y-2">
-            <label htmlFor="collection-filter" className="text-xs font-medium text-muted-foreground">
+            <p id="collection-filter-label" className="text-xs font-medium text-muted-foreground">
               Collection
-            </label>
+            </p>
             <Select
               value={selectedGender}
               onValueChange={(value) => onGenderChange(value as GenderFilter)}
             >
-              <SelectTrigger id="collection-filter" className="h-11 w-full border-border bg-background text-sm transition-all hover:border-accent/50 focus:border-accent">
+              <SelectTrigger
+                id="collection-filter"
+                aria-labelledby="collection-filter-label"
+                className="h-11 w-full border-border bg-background text-sm transition-all hover:border-accent/50 focus:border-accent"
+              >
                 <SelectValue placeholder="Select collection" />
               </SelectTrigger>
               <SelectContent>
@@ -112,14 +116,18 @@ const ShopSidebar = ({
 
           {/* Brand Filter */}
           <div className="flex-1 space-y-2">
-            <label htmlFor="brand-filter" className="text-xs font-medium text-muted-foreground">
+            <p id="brand-filter-label" className="text-xs font-medium text-muted-foreground">
               Brand
-            </label>
+            </p>
             <Select
               value={selectedBrand ?? "all"}
               onValueChange={(value) => onBrandChange(value === "all" ? null : value)}
             >
-              <SelectTrigger id="brand-filter" className="h-11 w-full border-border bg-background text-sm transition-all hover:border-accent/50 focus:border-accent">
+              <SelectTrigger
+                id="brand-filter"
+                aria-labelledby="brand-filter-label"
+                className="h-11 w-full border-border bg-background text-sm transition-all hover:border-accent/50 focus:border-accent"
+              >
                 <SelectValue placeholder="Select brand" />
               </SelectTrigger>
               <SelectContent>
