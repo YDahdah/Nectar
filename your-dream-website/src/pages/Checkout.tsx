@@ -262,13 +262,17 @@ const Checkout = () => {
                 </span>
               </div>
               {/* Stylized N logo icon */}
-              <span className="flex flex-shrink-0 items-center justify-center rounded-sm p-1 bg-background">
+              <span 
+                className="flex flex-shrink-0 items-center justify-center rounded-sm bg-white"
+                style={{ width: 40, height: 40 }}
+              >
                 <img
                   src="/nectar-checkout-logo.png"
                   alt="Nectar Logo"
                   width={40}
                   height={40}
-                  className="object-contain"
+                  className="w-full h-full object-cover"
+                  style={{ objectFit: "cover" }}
                   aria-hidden
                 />
               </span>

@@ -17,7 +17,7 @@ const Logo = ({ className = "", showLink = true, variant = "default" }: LogoProp
   const iconSize = variant === "footer" ? 32 : 40;
   const textSize = variant === "footer" ? "text-base" : "text-xl";
   const perfumeSize = variant === "footer" ? "text-sm" : "text-base";
-  const iconBgClass = variant === "footer" ? "bg-primary" : variant === "hero" ? "bg-white" : "bg-background";
+  const iconBgClass = "bg-white"; // Always use white background
 
   /** Use the custom N + stopper logo only on the homepage (header and hero). */
   const iconSrc = isHomePage || variant === "hero" ? HOMEPAGE_LOGO_SRC : nectarLogoIcon;
@@ -51,13 +51,17 @@ const Logo = ({ className = "", showLink = true, variant = "default" }: LogoProp
         </span>
       </div>
       {/* Stylized N / bottle icon – custom image on homepage only */}
-      <span className={`flex flex-shrink-0 items-center justify-center rounded-sm p-1 ${iconBgClass}`}>
+      <span 
+        className={`flex flex-shrink-0 items-center justify-center rounded-sm ${iconBgClass}`}
+        style={{ width: iconSize, height: iconSize }}
+      >
         <img
           src={iconSrc}
           alt=""
           width={iconSize}
           height={iconSize}
-          className="object-contain"
+          className="w-full h-full object-cover"
+          style={{ objectFit: "cover" }}
           aria-hidden
         />
       </span>
