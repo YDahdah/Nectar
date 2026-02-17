@@ -3,6 +3,23 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+// Suppress Firebase Performance Monitoring deprecated parameter warning
+// This warning comes from Firebase Hosting's auto-injected scripts and doesn't affect functionality
+if (typeof window !== "undefined") {
+  const originalWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    const message = args.join(" ");
+    // Suppress Firebase Performance deprecated parameter warning
+    if (
+      message.includes("feature_collector.js") &&
+      message.includes("deprecated parameters")
+    ) {
+      return; // Suppress this specific warning
+    }
+    originalWarn.apply(console, args);
+  };
+}
+
 // Handle chunk loading errors (e.g., when old chunks don't exist after deployment)
 // This happens when index.html is cached but chunks have new hashes
 window.addEventListener("error", (event) => {
