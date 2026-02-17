@@ -120,10 +120,13 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useReviews = () => {
+// Export hook separately to avoid Fast Refresh issues
+function useReviews() {
   const context = useContext(ReviewsContext);
   if (context === undefined) {
     throw new Error("useReviews must be used within a ReviewsProvider");
   }
   return context;
-};
+}
+
+export { useReviews };
