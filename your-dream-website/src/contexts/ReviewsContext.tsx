@@ -36,11 +36,14 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
       setError(null);
       try {
         const loadedReviews = await fetchReviews();
+        console.log("Loaded reviews from server:", loadedReviews.length);
         setReviews(loadedReviews);
       } catch (err) {
-        console.error("Error loading reviews:", err);
-        setError(err instanceof Error ? err.message : "Failed to load reviews");
-        // Keep existing reviews on error (graceful degradation)
+        const errorMessage = err instanceof Error ? err.message : "Failed to load reviews";
+        console.error("Error loading reviews from server:", errorMessage);
+        setError(errorMessage);
+        // Start with empty array - don't use localStorage fallback
+        setReviews([]);
       } finally {
         setIsLoading(false);
       }
