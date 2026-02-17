@@ -22,6 +22,7 @@ import newsletterRoutes from "./routes/newsletterRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import emailRoutes from "./routes/emailRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
 import cors from "cors";
 
 const app = express();
@@ -191,6 +192,7 @@ app.get("/api", (req, res) => {
       orders: "/api/orders",
       products: "/api/products",
       newsletter: "/api/newsletter",
+      reviews: "/api/reviews",
       test: "/api/test",
       email: "/api/send-email",
       emailTest: "/api/test-email-config",
@@ -226,6 +228,7 @@ app.get("/metrics", (req, res) => {
 app.use("/api/orders", orderRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/reviews", reviewRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api", emailRoutes);
 

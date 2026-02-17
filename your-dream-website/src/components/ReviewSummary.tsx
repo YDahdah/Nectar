@@ -189,7 +189,7 @@ const ReviewSummary = () => {
     }
   };
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
     if (rating === 0) {
       toast({
         title: "Rating Required",
@@ -199,32 +199,48 @@ const ReviewSummary = () => {
       return;
     }
 
-    addReview(rating, comment || undefined, author || undefined, photo || undefined);
-    setRating(0);
-    setComment("");
-    setAuthor("");
-    setPhoto(null);
-    setPhotoPreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    try {
+      await addReview(rating, comment || undefined, author || undefined, photo || undefined);
+      setRating(0);
+      setComment("");
+      setAuthor("");
+      setPhoto(null);
+      setPhotoPreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      if (fileInputRefEmpty.current) {
+        fileInputRefEmpty.current.value = '';
+      }
+      setIsDialogOpen(false);
+      toast({
+        title: "Review Submitted",
+        description: "Thank you for your review!",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to submit review. Please try again.",
+        variant: "destructive",
+      });
     }
-    if (fileInputRefEmpty.current) {
-      fileInputRefEmpty.current.value = '';
-    }
-    setIsDialogOpen(false);
-    toast({
-      title: "Review Submitted",
-      description: "Thank you for your review!",
-    });
   };
 
-  const handleDeleteReview = (reviewId: string) => {
+  const handleDeleteReview = async (reviewId: string) => {
     if (window.confirm("Are you sure you want to delete this review?")) {
-      deleteReview(reviewId);
-      toast({
-        title: "Review Deleted",
-        description: "The review has been removed.",
-      });
+      try {
+        await deleteReview(reviewId);
+        toast({
+          title: "Review Deleted",
+          description: "The review has been removed.",
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to delete review. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 

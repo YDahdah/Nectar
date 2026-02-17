@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { fetchReviews, createReview as createReviewAPI, deleteReview as deleteReviewAPI } from "@/api/reviews";
 
 export interface Review {
   id: string;
@@ -12,77 +13,71 @@ export interface Review {
 
 interface ReviewsContextType {
   reviews: Review[];
-  addReview: (rating: number, comment?: string, author?: string, photo?: string) => void;
-  deleteReview: (reviewId: string) => void;
+  addReview: (rating: number, comment?: string, author?: string, photo?: string) => Promise<void>;
+  deleteReview: (reviewId: string) => Promise<void>;
   getOverallRating: () => number;
   getRatingBreakdown: () => { stars: number; count: number; percentage: number }[];
   getTotalReviews: () => number;
+  isLoading: boolean;
+  error: string | null;
 }
 
 const ReviewsContext = createContext<ReviewsContextType | undefined>(undefined);
 
-const STORAGE_KEY = "nectar_reviews";
-
-// Load reviews from localStorage
-const loadReviewsFromStorage = (): Review[] => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    
-    const parsed = JSON.parse(stored) as Array<Omit<Review, "date"> & { date: string }>;
-    // Convert date strings back to Date objects
-    return parsed.map((review): Review => ({
-      ...review,
-      date: new Date(review.date),
-    }));
-  } catch (error) {
-    console.error("Error loading reviews from storage:", error);
-    return [];
-  }
-};
-
-// Save reviews to localStorage
-const saveReviewsToStorage = (reviews: Review[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
-  } catch (error) {
-    console.error("Error saving reviews to storage:", error);
-  }
-};
-
 export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load reviews from localStorage on mount
+  // Load reviews from API on mount
   useEffect(() => {
-    const loadedReviews = loadReviewsFromStorage();
-    setReviews(loadedReviews);
-    setIsLoaded(true);
+    const loadReviews = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const loadedReviews = await fetchReviews();
+        setReviews(loadedReviews);
+      } catch (err) {
+        console.error("Error loading reviews:", err);
+        setError(err instanceof Error ? err.message : "Failed to load reviews");
+        // Keep existing reviews on error (graceful degradation)
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadReviews();
   }, []);
 
-  // Save reviews to localStorage whenever they change
-  useEffect(() => {
-    if (isLoaded) {
-      saveReviewsToStorage(reviews);
+  const addReview = async (rating: number, comment?: string, author?: string, photo?: string) => {
+    try {
+      setError(null);
+      const newReview = await createReviewAPI({
+        rating,
+        comment,
+        author,
+        photo,
+      });
+      // Optimistically add the review immediately
+      setReviews((prev) => [...prev, newReview]);
+    } catch (err) {
+      console.error("Error creating review:", err);
+      setError(err instanceof Error ? err.message : "Failed to create review");
+      throw err; // Re-throw so the UI can handle it
     }
-  }, [reviews, isLoaded]);
-
-  const addReview = (rating: number, comment?: string, author?: string, photo?: string) => {
-    const newReview: Review = {
-      id: Date.now().toString(),
-      rating,
-      comment,
-      author,
-      date: new Date(),
-      verified: true, // Mark as verified
-      photo,
-    };
-    setReviews((prev) => [...prev, newReview]);
   };
 
-  const deleteReview = (reviewId: string) => {
-    setReviews((prev) => prev.filter((review) => review.id !== reviewId));
+  const deleteReview = async (reviewId: string) => {
+    try {
+      setError(null);
+      await deleteReviewAPI(reviewId);
+      // Optimistically remove the review immediately
+      setReviews((prev) => prev.filter((review) => review.id !== reviewId));
+    } catch (err) {
+      console.error("Error deleting review:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete review");
+      throw err; // Re-throw so the UI can handle it
+    }
   };
 
   const getOverallRating = (): number => {
@@ -113,6 +108,8 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
         getOverallRating,
         getRatingBreakdown,
         getTotalReviews,
+        isLoading,
+        error,
       }}
     >
       {children}
@@ -127,4 +124,3 @@ export const useReviews = () => {
   }
   return context;
 };
-
