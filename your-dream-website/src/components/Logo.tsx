@@ -24,44 +24,54 @@ const Logo = ({ className = "", showLink = true, variant = "default" }: LogoProp
 
   const logoContent = (
     <div className={`flex items-center gap-3 ${className || ""}`}>
-      <div className="flex flex-col items-center">
-        {/* NECTAR - bold sans-serif, dark grey */}
+      <div className="flex flex-col items-start">
+        {/* NECTAR - bold sans-serif, dark grey/black */}
         <span 
           className={`font-bold uppercase ${textSize}`}
           style={{ 
             fontFamily: "Inter, system-ui, -apple-system, sans-serif",
             lineHeight: "1.2",
             fontWeight: 700,
-            color: "#363636"
+            color: "#363636",
+            letterSpacing: "0.02em"
           }}
         >
           NECTAR
         </span>
         
-        {/* perfume - cursive, golden, centered under NECTAR, a bit larger */}
+        {/* perfume - cursive, golden/tan, positioned below NECTAR */}
         <span
           className={`lowercase ${perfumeSize}`}
           style={{
             fontFamily: "'Dancing Script', cursive",
             lineHeight: "1.2",
-            color: "#CE9B3A"
+            color: "#CE9B3A",
+            marginTop: "-2px"
           }}
         >
           perfume
         </span>
       </div>
-      {/* Stylized N / bottle icon – custom image on homepage only */}
+      {/* Stylized N / bottle icon – golden outline logo in white box */}
       <span 
-        className={`flex flex-shrink-0 items-center justify-center rounded-sm ${iconBgClass}`}
-        style={{ width: iconSize, height: iconSize }}
+        className={`flex flex-shrink-0 items-center justify-center ${iconBgClass}`}
+        style={{ 
+          width: iconSize, 
+          height: iconSize,
+          minWidth: iconSize,
+          minHeight: iconSize
+        }}
       >
         <img
           src={iconSrc}
           alt=""
           width={iconSize}
           height={iconSize}
-          className="w-full h-full object-cover"
-          style={{ objectFit: "cover" }}
+          className="w-full h-full"
+          style={{ 
+            objectFit: "contain",
+            display: "block"
+          }}
           aria-hidden
         />
       </span>
