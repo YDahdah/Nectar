@@ -4,29 +4,43 @@ import { formatPhoneNumber } from '../utils/phoneFormatter.js';
 import logger from '../utils/logger.js';
 import config from '../config/config.js';
 import { ApiError } from '../middleware/errorHandler.js';
+import { generateOrderId, calculateOrderTotal, validateTotalPrice } from '../utils/helpers.js';
+import { ERROR_MESSAGES, ORDER_CONFIG } from '../utils/constants.js';
 
 /**
  * Process checkout and create order
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Promise<void>}
+ * 
+ * @throws {ApiError} If validation fails or order creation fails
  */
 export async function createOrder(req, res, next) {
   try {
     const orderData = req.body;
     
     // Generate order ID
-    const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+    const orderId = generateOrderId();
 
     // Format phone number
     const formattedPhone = formatPhoneNumber(orderData.phone);
     if (!formattedPhone) {
-      throw new ApiError(400, 'Invalid phone number format');
+      throw new ApiError(400, ERROR_MESSAGES.INVALID_PHONE);
     }
 
     // Calculate totals
-    const subtotal = orderData.items.reduce(
-      (sum, item) => sum + (item.price * item.quantity), 
-      0
-    );
-    const totalPrice = subtotal + (orderData.shippingCost || 0);
+    const subtotal = calculateOrderTotal(orderData.items, 0);
+    const shippingCost = Number(orderData.shippingCost) || 0;
+    const calculatedTotal = calculateOrderTotal(orderData.items, shippingCost);
+    
+    // Validate total price matches calculated total
+    const providedTotal = Number(orderData.totalPrice) || 0;
+    if (!validateTotalPrice(calculatedTotal, providedTotal)) {
+      logger.warn(`Order ${orderId}: Total price mismatch. Calculated: ${calculatedTotal}, Provided: ${providedTotal}`);
+      throw new ApiError(400, 'Total price mismatch. Please refresh and try again.');
+    }
 
     // Create order object
     const orderObject = {
@@ -43,12 +57,12 @@ export async function createOrder(req, res, next) {
       subtotal,
       shippingCost: orderData.shippingCost || 0,
       totalPrice,
-      paymentMethod: orderData.paymentMethod || 'Cash on Delivery',
-      shippingMethod: orderData.shippingMethod || 'Express Delivery (2-3 Working Days)',
+      paymentMethod: orderData.paymentMethod || ORDER_CONFIG.PAYMENT_METHODS.CASH_ON_DELIVERY,
+      shippingMethod: orderData.shippingMethod || ORDER_CONFIG.SHIPPING_METHODS.EXPRESS,
       notes: orderData.notes,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      status: 'pending',
+      status: ORDER_CONFIG.STATUS.PENDING,
       notifications: {
         whatsappSent: false,
         emailSent: false,
@@ -83,6 +97,11 @@ export async function createOrder(req, res, next) {
 
 /**
  * Send all notifications for an order
+ * 
+ * @param {Object} orderData - Order data object
+ * @param {string} orderId - Order ID
+ * @param {string} formattedPhone - Formatted phone number
+ * @returns {Promise<Object>} Results of notification attempts
  */
 async function sendNotifications(orderData, orderId, formattedPhone) {
   const results = {

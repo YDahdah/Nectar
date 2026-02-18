@@ -15,6 +15,7 @@ import {
 } from "./middleware/security.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import performanceMiddleware, { getMetrics } from "./middleware/performance.js";
+import prometheusMiddleware, { prometheusMetricsHandler } from "./middleware/prometheus.js";
 
 // Import routes
 import orderRoutes from "./routes/orderRoutes.js";
@@ -91,13 +92,51 @@ const addCorsToResponse = (req, res) => {
 
 // Health check endpoints - must be before middleware to respond immediately
 // Cloud Run uses these for health checks
-app.get("/health", (req, res) => {
+app.get("/health", async (req, res) => {
   addCorsToResponse(req, res);
-  res.status(200).json({
+  
+  const health = {
     status: "ok",
     message: "API is running",
     timestamp: new Date().toISOString(),
-  });
+    uptime: process.uptime(),
+    environment: config.nodeEnv,
+  };
+
+  // Optional: Check database connection
+  if (process.env.HEALTH_CHECK_DB === "true") {
+    try {
+      const { getPool } = await import("./utils/db-pool.js");
+      const pool = await getPool();
+      if (pool) {
+        await pool.query("SELECT 1");
+        health.database = "connected";
+      }
+    } catch (error) {
+      health.database = "disconnected";
+      health.status = "degraded";
+      return res.status(503).json(health);
+    }
+  }
+
+  // Optional: Check Redis connection
+  if (process.env.HEALTH_CHECK_REDIS === "true") {
+    try {
+      const { redisClient, redisAvailable } = await import("./middleware/cache.js");
+      if (redisAvailable && redisClient) {
+        await redisClient.ping();
+        health.redis = "connected";
+      } else {
+        health.redis = "unavailable";
+      }
+    } catch (error) {
+      health.redis = "disconnected";
+      health.status = "degraded";
+    }
+  }
+
+  const statusCode = health.status === "ok" ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // Root path - respond immediately for Cloud Run health checks
@@ -219,6 +258,9 @@ app.get("/api", (req, res) => {
 // Performance monitoring middleware (after security, before routes)
 app.use(performanceMiddleware);
 
+// Prometheus metrics middleware
+app.use(prometheusMiddleware);
+
 // Additional health check endpoint with more details (after middleware)
 app.get("/health/detailed", (req, res) => {
   res.json({
@@ -229,13 +271,22 @@ app.get("/health/detailed", (req, res) => {
   });
 });
 
-// Metrics endpoint for monitoring
+// Metrics endpoint for monitoring (JSON format)
 app.get("/metrics", (req, res) => {
   // Optional: Add authentication for metrics endpoint in production
   if (process.env.NODE_ENV === "production" && req.headers["x-api-key"] !== process.env.METRICS_API_KEY) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   res.json(getMetrics());
+});
+
+// Prometheus metrics endpoint (Prometheus format)
+app.get("/metrics/prometheus", (req, res) => {
+  // Optional: Add authentication for metrics endpoint in production
+  if (process.env.NODE_ENV === "production" && req.headers["x-api-key"] !== process.env.METRICS_API_KEY) {
+    return res.status(401).send("# Unauthorized\n");
+  }
+  prometheusMetricsHandler(req, res);
 });
 
 // API routes
