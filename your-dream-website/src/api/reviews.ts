@@ -10,6 +10,7 @@ export interface CreateReviewData {
   comment?: string;
   author?: string;
   photo?: string;
+  userId?: string;
 }
 
 // API returns dates as ISO strings, we convert them to Date objects
@@ -21,6 +22,7 @@ interface ReviewFromAPI {
   date: string; // ISO string from API
   verified?: boolean;
   photo?: string;
+  userId?: string;
 }
 
 export interface ReviewsResponse {
@@ -114,7 +116,7 @@ export async function createReview(reviewData: CreateReviewData): Promise<Review
 /**
  * Delete a review
  */
-export async function deleteReview(reviewId: string): Promise<void> {
+export async function deleteReview(reviewId: string, userId?: string): Promise<void> {
   try {
     const url = getApiUrl(`/reviews/${reviewId}`);
     console.log("Deleting review at:", url);
@@ -123,6 +125,7 @@ export async function deleteReview(reviewId: string): Promise<void> {
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({ userId }), // Send userId to verify ownership
     });
 
     if (!response.ok) {

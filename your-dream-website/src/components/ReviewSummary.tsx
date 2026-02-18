@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { isAdmin } from "@/utils/admin";
+import { isOwnReview } from "@/utils/userId";
 
 // Star icon component - uses brand gold
 const Star = ({ filled, size = "default" }: { filled: boolean; size?: "default" | "sm" }) => {
@@ -568,7 +569,23 @@ const ReviewSummary = () => {
           {sortedReviews.length > 0 && (
             <div className="space-y-4 mt-12">
               <h3 className="font-serif text-xl font-medium text-foreground">What customers are saying</h3>
-              {visibleReviews.map((review, index) => (
+              {visibleReviews.map((review, index) => {
+                const canDelete = adminMode || isOwnReview(review);
+                // Debug logging
+                console.log('[ReviewSummary] Review:', {
+                  id: review.id,
+                  author: review.author,
+                  userId: review.userId,
+                  adminMode,
+                  canDelete,
+                  isOwn: isOwnReview(review),
+                });
+                
+                // TEMPORARY: Show button for all reviews to test visibility
+                // Remove this after confirming button renders correctly
+                const showButtonForTesting = true; // Set to false after testing
+                
+                return (
                 <motion.article
                   key={review.id}
                   initial={{ opacity: 0, y: 12 }}
@@ -576,13 +593,14 @@ const ReviewSummary = () => {
                   transition={{ duration: 0.35, delay: Math.min(index, 5) * 0.05 }}
                   className="rounded-2xl border border-[hsl(var(--border))] bg-white p-5 sm:p-6 shadow-sm relative"
                 >
-                  {adminMode && (
+                  {(canDelete || showButtonForTesting) && (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDeleteReview(review.id)}
-                      className="absolute top-4 right-4 text-muted-foreground hover:text-destructive p-2 h-auto"
+                      className="absolute top-4 right-4 z-50 bg-white/80 backdrop-blur-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 p-2 h-8 w-8 rounded-md border border-border/50 shadow-sm"
                       aria-label="Delete review"
+                      title={adminMode ? "Delete review (Admin)" : "Delete your review"}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -635,7 +653,8 @@ const ReviewSummary = () => {
                     </div>
                   </div>
                 </motion.article>
-              ))}
+                );
+              })}
               {hasMoreReviews && (
                 <div className="pt-2 flex justify-center">
                   <Button

@@ -1,50 +1,5 @@
 import logger from '../utils/logger.js';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Path to reviews JSON file (stores reviews persistently)
-const REVIEWS_FILE = path.join(__dirname, '../data/reviews.json');
-
-// Ensure data directory exists
-async function ensureDataDir() {
-  const dataDir = path.dirname(REVIEWS_FILE);
-  try {
-    await fs.access(dataDir);
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true });
-  }
-}
-
-// Load reviews from file
-async function loadReviews() {
-  try {
-    await ensureDataDir();
-    const data = await fs.readFile(REVIEWS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      // File doesn't exist, return empty array
-      return [];
-    }
-    logger.error('Error loading reviews:', error);
-    return [];
-  }
-}
-
-// Save reviews to file
-async function saveReviews(reviews) {
-  try {
-    await ensureDataDir();
-    await fs.writeFile(REVIEWS_FILE, JSON.stringify(reviews, null, 2), 'utf-8');
-  } catch (error) {
-    logger.error('Error saving reviews:', error);
-    throw error;
-  }
-}
+import * as reviewModel from '../models/reviewModel.js';
 
 /**
  * GET /api/reviews
@@ -52,7 +7,7 @@ async function saveReviews(reviews) {
  */
 export async function getReviews(req, res, next) {
   try {
-    const reviews = await loadReviews();
+    const reviews = await reviewModel.getAllReviews();
     res.json({
       success: true,
       reviews,
@@ -69,7 +24,7 @@ export async function getReviews(req, res, next) {
  */
 export async function createReview(req, res, next) {
   try {
-    const { rating, comment, author, photo } = req.body;
+    const { rating, comment, author, photo, userId } = req.body;
 
     // Validation
     if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
@@ -79,20 +34,13 @@ export async function createReview(req, res, next) {
       });
     }
 
-    const reviews = await loadReviews();
-    
-    const newReview = {
-      id: Date.now().toString(),
+    const newReview = await reviewModel.createReview({
       rating,
-      comment: comment || undefined,
-      author: author || undefined,
-      photo: photo || undefined,
-      date: new Date().toISOString(),
-      verified: true,
-    };
-
-    reviews.push(newReview);
-    await saveReviews(reviews);
+      comment,
+      author,
+      photo,
+      userId,
+    });
 
     res.status(201).json({
       success: true,
@@ -106,24 +54,22 @@ export async function createReview(req, res, next) {
 
 /**
  * DELETE /api/reviews/:reviewId
- * Deletes a review (admin only - you can add authentication later)
+ * Deletes a review (users can delete their own, admins can delete any)
  */
 export async function deleteReview(req, res, next) {
   try {
     const { reviewId } = req.params;
+    const { userId } = req.body; // Get userId from request body
 
-    const reviews = await loadReviews();
-    const initialLength = reviews.length;
-    const filteredReviews = reviews.filter((review) => review.id !== reviewId);
+    // If userId is provided, verify ownership; if not, allow deletion (admin mode)
+    const deleted = await reviewModel.deleteReview(reviewId, userId);
 
-    if (filteredReviews.length === initialLength) {
+    if (!deleted) {
       return res.status(404).json({
         success: false,
-        error: 'Review not found',
+        error: 'Review not found or you do not have permission to delete it',
       });
     }
-
-    await saveReviews(filteredReviews);
 
     res.json({
       success: true,
@@ -131,6 +77,15 @@ export async function deleteReview(req, res, next) {
     });
   } catch (error) {
     logger.error('deleteReview error:', error);
+    
+    // Handle ownership verification errors
+    if (error.message.includes('only delete your own')) {
+      return res.status(403).json({
+        success: false,
+        error: error.message,
+      });
+    }
+    
     next(error);
   }
 }

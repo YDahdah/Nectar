@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { fetchReviews, createReview as createReviewAPI, deleteReview as deleteReviewAPI } from "@/api/reviews";
+import { getUserId } from "@/utils/userId";
 
 export interface Review {
   id: string;
@@ -9,6 +10,7 @@ export interface Review {
   date: Date;
   verified?: boolean;
   photo?: string; // Base64 encoded image or URL
+  userId?: string; // User identifier for ownership tracking
 }
 
 interface ReviewsContextType {
@@ -28,20 +30,6 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Clear old localStorage data on mount (migration from localStorage to API)
-  useEffect(() => {
-    // Remove old localStorage reviews if they exist
-    try {
-      const oldStorageKey = "nectar_reviews";
-      if (typeof window !== "undefined" && localStorage.getItem(oldStorageKey)) {
-        console.log("Clearing old localStorage reviews (migrating to server storage)");
-        localStorage.removeItem(oldStorageKey);
-      }
-    } catch (err) {
-      console.warn("Could not clear old localStorage:", err);
-    }
-  }, []);
 
   // Load reviews from API on mount
   useEffect(() => {
@@ -73,11 +61,13 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
   const addReview = async (rating: number, comment?: string, author?: string, photo?: string) => {
     try {
       setError(null);
+      const userId = getUserId(); // Get current user's ID
       const newReview = await createReviewAPI({
         rating,
         comment,
         author,
         photo,
+        userId,
       });
       // Optimistically add the review immediately
       setReviews((prev) => [...prev, newReview]);
@@ -91,7 +81,8 @@ export const ReviewsProvider = ({ children }: { children: ReactNode }) => {
   const deleteReview = async (reviewId: string) => {
     try {
       setError(null);
-      await deleteReviewAPI(reviewId);
+      const userId = getUserId(); // Get current user's ID for ownership verification
+      await deleteReviewAPI(reviewId, userId);
       // Optimistically remove the review immediately
       setReviews((prev) => prev.filter((review) => review.id !== reviewId));
     } catch (err) {

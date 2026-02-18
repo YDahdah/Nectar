@@ -24,6 +24,7 @@ import emailRoutes from "./routes/emailRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import cors from "cors";
+import { initializeReviewsCollection } from "./models/reviewModel.js";
 
 const app = express();
 
@@ -275,6 +276,16 @@ let currentPort = basePort;
 const maxAttempts = 10;
 
 const tryStartServer = async () => {
+  // Initialize database collections/tables before starting server
+  try {
+    logger.info("Initializing database collections...");
+    await initializeReviewsCollection();
+    logger.info("Database collections initialized");
+  } catch (error) {
+    logger.warn("Warning: Could not initialize database collections:", error.message);
+    logger.warn("Server will continue, but database operations may fail");
+  }
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const server = await startServer(currentPort);
