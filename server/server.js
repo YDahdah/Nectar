@@ -195,26 +195,33 @@ const frontendDistPath = join(__dirname, '../your-dream-website/dist');
 
 if (existsSync(frontendDistPath)) {
   // CRITICAL: Serve static assets with explicit MIME types
-  // This must come BEFORE any catch-all routes to prevent SPA fallback from catching JS files
+  // This MUST come BEFORE any other routes to prevent SPA fallback from catching JS files
+  // Use express.static with explicit MIME type handling
   app.use(express.static(frontendDistPath, {
-    setHeaders: (res, filePath) => {
+    setHeaders: (res, filePath, stat) => {
       const ext = extname(filePath).toLowerCase();
       
       // CRITICAL: JavaScript modules MUST use application/javascript
       // This fixes the "Expected a JavaScript-or-Wasm module script" error
       if (ext === '.js' || ext === '.mjs') {
+        // Force the correct MIME type - this is critical!
+        res.type('application/javascript');
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        logger.debug(`✅ Serving JS file: ${filePath}`);
+        logger.info(`✅ Serving JS file: ${filePath} with Content-Type: application/javascript`);
       } else if (ext === '.css') {
+        res.type('text/css');
         res.setHeader('Content-Type', 'text/css; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       } else if (ext === '.json') {
+        res.type('application/json');
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
       } else if (ext === '.html') {
+        res.type('text/html');
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       } else if (ext === '.wasm') {
+        res.type('application/wasm');
         res.setHeader('Content-Type', 'application/wasm');
       }
     },
@@ -223,36 +230,35 @@ if (existsSync(frontendDistPath)) {
   }));
   
   logger.info(`✅ Static files serving enabled from: ${frontendDistPath}`);
-  
-  // Debug: Log static file requests
-  app.use((req, res, next) => {
-    if (req.path.match(/\.(js|mjs|css)$/i)) {
-      logger.debug(`📦 Static file request: ${req.path}`);
-    }
-    next();
-  });
 } else {
   logger.warn(`⚠️  Frontend dist directory not found at: ${frontendDistPath}`);
 }
 
-// MIME type and CDN-friendly headers middleware
-// This ensures headers are set even if static middleware doesn't catch the request
+// MIME type middleware - runs AFTER static file serving
+// This ensures headers are set correctly even if express.static doesn't catch it
 app.use((req, res, next) => {
   const path = req.path.toLowerCase();
   
   // CRITICAL FIX: JavaScript modules MUST use application/javascript
-  if (path.endsWith('.js') || path.endsWith('.mjs')) {
+  // Only set if not already set by express.static
+  if ((path.endsWith('.js') || path.endsWith('.mjs')) && !res.getHeader('Content-Type')) {
+    res.type('application/javascript');
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-  } else if (path.endsWith('.css')) {
+    logger.warn(`⚠️  JS file MIME type set by middleware (not by express.static): ${req.path}`);
+  } else if (path.endsWith('.css') && !res.getHeader('Content-Type')) {
+    res.type('text/css');
     res.setHeader('Content-Type', 'text/css; charset=utf-8');
-  } else if (path.endsWith('.json')) {
+  } else if (path.endsWith('.json') && !res.getHeader('Content-Type')) {
+    res.type('application/json');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  } else if (path.endsWith('.html')) {
+  } else if (path.endsWith('.html') && !res.getHeader('Content-Type')) {
+    res.type('text/html');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  } else if (path.endsWith('.wasm')) {
+  } else if (path.endsWith('.wasm') && !res.getHeader('Content-Type')) {
+    res.type('application/wasm');
     res.setHeader('Content-Type', 'application/wasm');
-  } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i)) {
+  } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i) && !res.getHeader('Content-Type')) {
     res.setHeader('Content-Type', 'font/woff2');
   }
   
@@ -261,7 +267,9 @@ app.use((req, res, next) => {
     res.setHeader('CDN-Cache-Control', 'public, max-age=300, s-maxage=300');
   } else if (req.path.match(/\.(js|mjs|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)) {
     res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    if (!res.getHeader('Cache-Control')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
   }
   
   // Add timing headers for performance monitoring
