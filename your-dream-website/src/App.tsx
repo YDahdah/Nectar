@@ -6,7 +6,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ShopProvider } from "@/contexts/ShopContext";
-import { ReviewsProvider } from "@/contexts/ReviewsContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import WebsiteStructuredData from "@/components/WebsiteStructuredData";
 import BackToTop from "@/components/BackToTop";
@@ -85,8 +84,7 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <CartProvider>
         <ShopProvider>
-          <ReviewsProvider>
-            <TooltipProvider>
+          <TooltipProvider>
               <WebsiteStructuredData />
               <Toaster />
               <Sonner />
@@ -114,7 +112,6 @@ const App = () => {
                 </ErrorBoundary>
               </BrowserRouter>
             </TooltipProvider>
-          </ReviewsProvider>
         </ShopProvider>
       </CartProvider>
     </QueryClientProvider>

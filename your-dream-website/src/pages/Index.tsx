@@ -1,6 +1,5 @@
 import Hero from "@/components/Hero";
 import FeaturedProducts from "@/components/FeaturedProducts";
-import ReviewSummary from "@/components/ReviewSummary";
 import Footer from "@/components/Footer";
 import SkipLink from "@/components/SkipLink";
 import OrganizationStructuredData from "@/components/OrganizationStructuredData";
@@ -19,7 +18,6 @@ const Index = () => {
       <main id="main-content" role="main">
         <Hero />
         <FeaturedProducts />
-        <ReviewSummary />
       </main>
       <Footer />
     </div>
