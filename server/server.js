@@ -146,8 +146,23 @@ app.use(compression({
   brotli: true,
 }));
 
-// CDN-friendly headers middleware
+// MIME type and CDN-friendly headers middleware
 app.use((req, res, next) => {
+  // Set proper Content-Type headers for static assets
+  const path = req.path.toLowerCase();
+  
+  if (path.endsWith('.js') || path.endsWith('.mjs')) {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  } else if (path.endsWith('.css')) {
+    res.setHeader('Content-Type', 'text/css; charset=utf-8');
+  } else if (path.endsWith('.json')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  } else if (path.endsWith('.html')) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i)) {
+    res.setHeader('Content-Type', 'font/woff2');
+  }
+  
   // Add CDN cache control headers
   if (req.path.startsWith('/api/')) {
     // API responses should be cached by CDN with shorter TTL
@@ -155,6 +170,7 @@ app.use((req, res, next) => {
   } else if (req.path.match(/\.(js|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico)$/i)) {
     // Static assets can be cached longer
     res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
   
   // Add timing headers for performance monitoring
