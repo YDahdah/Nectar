@@ -4,7 +4,7 @@ import express from "express";
 import morgan from "morgan";
 import compression from "compression";
 import { fileURLToPath } from "url";
-import { dirname } from "path";
+import { dirname, join, extname } from "path";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
 import {
@@ -183,20 +183,51 @@ app.use(compression({
   brotli: true,
 }));
 
+// CRITICAL FIX: Serve static files with proper MIME types for ES modules
+// This MUST come before API routes to handle static asset requests
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Serve static files from frontend dist directory if it exists
+// This ensures JavaScript modules are served with correct MIME type
+try {
+  const frontendDistPath = join(__dirname, '../your-dream-website/dist');
+  app.use(express.static(frontendDistPath, {
+    setHeaders: (res, filePath) => {
+      const ext = extname(filePath).toLowerCase();
+      
+      // CRITICAL: JavaScript modules MUST use application/javascript
+      // This fixes the "Expected a JavaScript-or-Wasm module script" error
+      if (ext === '.js' || ext === '.mjs') {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (ext === '.css') {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (ext === '.json') {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      } else if (ext === '.html') {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      } else if (ext === '.wasm') {
+        res.setHeader('Content-Type', 'application/wasm');
+      }
+    },
+    index: false, // Don't serve index.html for directory requests
+  }));
+} catch (error) {
+  // Frontend dist directory doesn't exist, skip static file serving
+  logger.debug('Frontend dist directory not found, skipping static file serving');
+}
+
 // MIME type and CDN-friendly headers middleware
-// CRITICAL: This middleware sets proper Content-Type headers for static assets
-// It runs BEFORE static file serving to ensure correct MIME types
+// This ensures headers are set even if static middleware doesn't catch the request
 app.use((req, res, next) => {
-  // Set proper Content-Type headers for static assets
   const path = req.path.toLowerCase();
   
-  // CRITICAL FIX: JavaScript modules MUST use application/javascript or text/javascript
-  // Modern browsers strictly enforce this for ES modules
+  // CRITICAL FIX: JavaScript modules MUST use application/javascript
   if (path.endsWith('.js') || path.endsWith('.mjs')) {
-    // Use application/javascript (preferred) or text/javascript
-    // Both are valid, but application/javascript is more standard for modules
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    // Ensure this header is not overridden
     res.setHeader('X-Content-Type-Options', 'nosniff');
   } else if (path.endsWith('.css')) {
     res.setHeader('Content-Type', 'text/css; charset=utf-8');
@@ -205,7 +236,6 @@ app.use((req, res, next) => {
   } else if (path.endsWith('.html')) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
   } else if (path.endsWith('.wasm')) {
-    // WebAssembly files MUST use application/wasm
     res.setHeader('Content-Type', 'application/wasm');
   } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i)) {
     res.setHeader('Content-Type', 'font/woff2');
@@ -213,10 +243,8 @@ app.use((req, res, next) => {
   
   // Add CDN cache control headers
   if (req.path.startsWith('/api/')) {
-    // API responses should be cached by CDN with shorter TTL
     res.setHeader('CDN-Cache-Control', 'public, max-age=300, s-maxage=300');
   } else if (req.path.match(/\.(js|mjs|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)) {
-    // Static assets can be cached longer
     res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
@@ -313,6 +341,34 @@ app.use((req, res, next) => {
     return res.status(404).json({ error: "Not found" });
   }
   next();
+});
+
+// SPA fallback - serve index.html for non-API routes (must be after API routes)
+// This allows the frontend router to handle client-side routing
+app.get('*', (req, res, next) => {
+  // Skip if this is an asset request (should be handled by static middleware)
+  if (req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)) {
+    return next(); // Let 404 handler catch it
+  }
+  
+  // Skip API routes
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  
+  // Serve index.html for SPA routes
+  try {
+    const frontendDistPath = join(__dirname, '../your-dream-website/dist');
+    const indexPath = join(frontendDistPath, 'index.html');
+    res.sendFile(indexPath, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
+    });
+  } catch (error) {
+    next(); // Let 404 handler catch it if index.html doesn't exist
+  }
 });
 
 // 404 handler

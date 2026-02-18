@@ -14,7 +14,7 @@ const orderItemSchema = Joi.object({
 /**
  * Order validation schema
  */
-export const orderSchema = Joi.object({
+export export const orderSchema = Joi.object({
   // Customer Information
   firstName: Joi.string().required().trim().min(1).max(100)
     .pattern(/^[a-zA-Z\s'-]+$/)
@@ -70,7 +70,7 @@ export const orderSchema = Joi.object({
 /**
  * Validate order data
  */
-export function validateOrder(data) {
+export export function validateOrder(data) {
   const { error, value } = orderSchema.validate(data, {
     abortEarly: false,
     stripUnknown: true

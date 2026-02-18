@@ -260,7 +260,7 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
  * Get order by ID
  * Note: Database functionality has been removed. This endpoint returns an error.
  */
-export async function getOrderById(req, res, next) {
+async function getOrderById(req, res, next) {
   try {
     throw new ApiError(503, 'Database service unavailable. Order lookup is not supported.');
   } catch (error) {

@@ -37,7 +37,7 @@ function getRateLimitStore(prefix) {
  * CORS configuration – allow all origins (required for browser requests from other origins).
  * If you use nginx in front of this app, proxy /api and /health to Node so this middleware can add CORS headers.
  */
-export const corsMiddleware = cors({
+const corsMiddleware = cors({
   origin: true, // reflect request Origin (e.g. http://localhost:8080 or https://perfumenectar.com)
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
