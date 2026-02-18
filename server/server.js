@@ -184,18 +184,29 @@ app.use(compression({
 }));
 
 // MIME type and CDN-friendly headers middleware
+// CRITICAL: This middleware sets proper Content-Type headers for static assets
+// It runs BEFORE static file serving to ensure correct MIME types
 app.use((req, res, next) => {
   // Set proper Content-Type headers for static assets
   const path = req.path.toLowerCase();
   
+  // CRITICAL FIX: JavaScript modules MUST use application/javascript or text/javascript
+  // Modern browsers strictly enforce this for ES modules
   if (path.endsWith('.js') || path.endsWith('.mjs')) {
+    // Use application/javascript (preferred) or text/javascript
+    // Both are valid, but application/javascript is more standard for modules
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    // Ensure this header is not overridden
+    res.setHeader('X-Content-Type-Options', 'nosniff');
   } else if (path.endsWith('.css')) {
     res.setHeader('Content-Type', 'text/css; charset=utf-8');
   } else if (path.endsWith('.json')) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
   } else if (path.endsWith('.html')) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  } else if (path.endsWith('.wasm')) {
+    // WebAssembly files MUST use application/wasm
+    res.setHeader('Content-Type', 'application/wasm');
   } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i)) {
     res.setHeader('Content-Type', 'font/woff2');
   }
@@ -204,7 +215,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     // API responses should be cached by CDN with shorter TTL
     res.setHeader('CDN-Cache-Control', 'public, max-age=300, s-maxage=300');
-  } else if (req.path.match(/\.(js|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico)$/i)) {
+  } else if (req.path.match(/\.(js|mjs|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)) {
     // Static assets can be cached longer
     res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
