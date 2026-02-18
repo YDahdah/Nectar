@@ -5,6 +5,7 @@ import morgan from "morgan";
 import compression from "compression";
 import { fileURLToPath } from "url";
 import { dirname, join, extname } from "path";
+import { existsSync } from "fs";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
 import {
@@ -184,14 +185,17 @@ app.use(compression({
 }));
 
 // CRITICAL FIX: Serve static files with proper MIME types for ES modules
-// This MUST come before API routes to handle static asset requests
+// This MUST come before API routes and SPA fallback to handle static asset requests
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Serve static files from frontend dist directory if it exists
 // This ensures JavaScript modules are served with correct MIME type
-try {
-  const frontendDistPath = join(__dirname, '../your-dream-website/dist');
+const frontendDistPath = join(__dirname, '../your-dream-website/dist');
+
+if (existsSync(frontendDistPath)) {
+  // Serve static assets with explicit MIME types
+  // CRITICAL: This must come BEFORE any catch-all routes
   app.use(express.static(frontendDistPath, {
     setHeaders: (res, filePath) => {
       const ext = extname(filePath).toLowerCase();
@@ -214,10 +218,12 @@ try {
       }
     },
     index: false, // Don't serve index.html for directory requests
+    fallthrough: false, // Don't fall through to next middleware if file not found
   }));
-} catch (error) {
-  // Frontend dist directory doesn't exist, skip static file serving
-  logger.debug('Frontend dist directory not found, skipping static file serving');
+  
+  logger.info(`Static files serving enabled from: ${frontendDistPath}`);
+} else {
+  logger.warn(`Frontend dist directory not found at: ${frontendDistPath}`);
 }
 
 // MIME type and CDN-friendly headers middleware
@@ -343,12 +349,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// SPA fallback - serve index.html for non-API routes (must be after API routes)
+// SPA fallback - serve index.html for non-API routes (must be AFTER API routes and static files)
 // This allows the frontend router to handle client-side routing
+// CRITICAL: This must NOT catch static file requests (js, css, etc.)
 app.get('*', (req, res, next) => {
-  // Skip if this is an asset request (should be handled by static middleware)
-  if (req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)) {
-    return next(); // Let 404 handler catch it
+  // CRITICAL: Skip if this is a static asset request
+  // These should be handled by express.static middleware above
+  const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
+  if (isStaticAsset) {
+    // If we reach here, the static file wasn't found - return 404
+    return res.status(404).json({ error: 'File not found' });
   }
   
   // Skip API routes
@@ -356,17 +366,26 @@ app.get('*', (req, res, next) => {
     return next();
   }
   
-  // Serve index.html for SPA routes
-  try {
-    const frontendDistPath = join(__dirname, '../your-dream-website/dist');
+  // Skip health/metrics endpoints
+  if (req.path === '/health' || req.path === '/health/detailed' || req.path.startsWith('/metrics')) {
+    return next();
+  }
+  
+  // Serve index.html for SPA routes only
+  if (existsSync(frontendDistPath)) {
     const indexPath = join(frontendDistPath, 'index.html');
     res.sendFile(indexPath, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
       },
+    }, (err) => {
+      if (err) {
+        logger.error('Error serving index.html:', err);
+        next();
+      }
     });
-  } catch (error) {
+  } else {
     next(); // Let 404 handler catch it if index.html doesn't exist
   }
 });
