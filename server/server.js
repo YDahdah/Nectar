@@ -5,7 +5,7 @@ import morgan from "morgan";
 import compression from "compression";
 import { fileURLToPath } from "url";
 import { dirname, join, extname } from "path";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
 import {
@@ -197,6 +197,8 @@ if (existsSync(frontendDistPath)) {
   // CRITICAL: Serve static assets with explicit MIME types
   // This MUST come BEFORE any other routes to prevent SPA fallback from catching JS files
   // Use express.static with explicit MIME type handling
+  // CRITICAL: Serve static files FIRST - before any other middleware
+  // This ensures JS files are served with correct MIME type
   app.use(express.static(frontendDistPath, {
     setHeaders: (res, filePath, stat) => {
       const ext = extname(filePath).toLowerCase();
@@ -226,12 +228,30 @@ if (existsSync(frontendDistPath)) {
       }
     },
     index: false, // Don't serve index.html for directory requests
-    // fallthrough: true allows 404 handler to catch missing files
+    fallthrough: true, // Allow fallthrough so blocker middleware can catch missing files
+    dotfiles: 'ignore', // Ignore dotfiles
   }));
   
   logger.info(`✅ Static files serving enabled from: ${frontendDistPath}`);
+  
+  // Log available files for debugging
+  try {
+    const assetsPath = join(frontendDistPath, 'assets');
+    if (existsSync(assetsPath)) {
+      const files = readdirSync(assetsPath);
+      const jsFiles = files.filter(f => f.endsWith('.js'));
+      logger.info(`📦 Found ${jsFiles.length} JS files in assets folder`);
+      if (jsFiles.length > 0) {
+        logger.info(`   Example: ${jsFiles[0]}`);
+      }
+    }
+  } catch (err) {
+    logger.debug('Could not list assets directory:', err.message);
+  }
 } else {
-  logger.warn(`⚠️  Frontend dist directory not found at: ${frontendDistPath}`);
+  logger.error(`❌ Frontend dist directory not found at: ${frontendDistPath}`);
+  logger.error(`   Current working directory: ${process.cwd()}`);
+  logger.error(`   __dirname: ${__dirname}`);
 }
 
 // MIME type middleware - runs AFTER static file serving
@@ -366,21 +386,48 @@ app.use((req, res, next) => {
   next();
 });
 
-// SPA fallback - serve index.html for non-API routes (must be AFTER API routes and static files)
-// CRITICAL: This must use app.use() not app.get() to catch all HTTP methods
-// But it must check for static assets FIRST
+// CRITICAL: Block static asset requests from reaching SPA fallback
+// This middleware MUST run before SPA fallback to prevent index.html from being served for JS files
 app.use((req, res, next) => {
-  // CRITICAL: Skip ALL static asset requests - they should be handled by express.static above
-  // If we reach here for a static asset, it means express.static didn't find it - return 404
+  // Check if this is a static asset request
   const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
+  
   if (isStaticAsset) {
-    // Static file not found - return 404 (don't serve index.html)
-    // Log for debugging
-    logger.error(`❌ Static file requested but not found: ${req.path} - This should have been handled by express.static`);
-    return res.status(404).json({ 
+    // If we reach here, express.static didn't find the file
+    // CRITICAL: Return 404, NEVER serve index.html for static assets
+    logger.error(`❌ CRITICAL: Static file not found: ${req.path}`);
+    logger.error(`   This means express.static didn't find the file at: ${join(frontendDistPath, req.path)}`);
+    logger.error(`   Frontend dist path: ${frontendDistPath}`);
+    
+    // Return 404 with proper content type
+    res.status(404);
+    res.type('application/json');
+    return res.json({ 
       error: 'File not found',
       path: req.path,
-      message: 'Static file not found. Check server logs for details.'
+      message: 'Static file not found. This should never return HTML.'
+    });
+  }
+  
+  next();
+});
+
+// SPA fallback - serve index.html for non-API routes (must be AFTER API routes and static files)
+// CRITICAL: Static assets are blocked by middleware above, so this will NEVER catch .js files
+app.use((req, res, next) => {
+  // TRIPLE-CHECK: NEVER serve index.html for static assets (absolute safety)
+  const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
+  if (isStaticAsset) {
+    logger.error(`❌ CRITICAL ERROR: SPA fallback caught static asset: ${req.path}`);
+    logger.error(`   This should be IMPOSSIBLE - blocker middleware should have caught this!`);
+    logger.error(`   Request URL: ${req.url}`);
+    logger.error(`   Request path: ${req.path}`);
+    // Return 500 error, NOT HTML
+    res.status(500);
+    res.type('application/json');
+    return res.json({ 
+      error: 'Server configuration error',
+      message: 'Static asset request reached SPA fallback - this should never happen'
     });
   }
   
@@ -392,6 +439,12 @@ app.use((req, res, next) => {
   // Skip health/metrics endpoints
   if (req.path === '/health' || req.path === '/health/detailed' || req.path.startsWith('/metrics')) {
     return next();
+  }
+  
+  // Skip if path looks like a file (extra safety)
+  if (req.path.includes('.')) {
+    logger.warn(`⚠️  SPA fallback: Path contains dot but wasn't caught by static asset check: ${req.path}`);
+    return next(); // Let 404 handler catch it
   }
   
   // Only serve index.html for actual routes (not files)
