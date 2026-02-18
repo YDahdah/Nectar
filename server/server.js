@@ -4,7 +4,7 @@ import express from "express";
 import morgan from "morgan";
 import compression from "compression";
 import { fileURLToPath } from "url";
-import { dirname, join, extname } from "path";
+import { dirname, join, extname, resolve } from "path";
 import { existsSync, readdirSync } from "fs";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
@@ -193,12 +193,63 @@ const __dirname = dirname(__filename);
 // This ensures JavaScript modules are served with correct MIME type
 const frontendDistPath = join(__dirname, '../your-dream-website/dist');
 
+// CRITICAL: Intercept ALL static asset requests FIRST - serve them directly with correct MIME type
+// This runs BEFORE express.static to ensure JS files NEVER get HTML
+app.use((req, res, next) => {
+  const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
+  
+  if (isStaticAsset && existsSync(frontendDistPath)) {
+    // Resolve file path - handle both absolute and relative paths
+    // req.path is like "/assets/js/react-vendor-B984J_S_.js"
+    // We need: frontendDistPath + req.path (join handles the slash correctly)
+    const filePath = join(frontendDistPath, req.path);
+    
+    if (existsSync(filePath)) {
+      const ext = extname(filePath).toLowerCase();
+      
+      // CRITICAL: Set MIME type BEFORE sending file
+      if (ext === '.js' || ext === '.mjs') {
+        res.type('application/javascript');
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        logger.info(`✅ Direct serving JS: ${req.path}`);
+      } else if (ext === '.css') {
+        res.type('text/css');
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      
+      // Send file directly - this prevents any other middleware from interfering
+      // Use absolute path for sendFile
+      const absolutePath = resolve(filePath);
+      return res.sendFile(absolutePath, (err) => {
+        if (err) {
+          logger.error(`Error sending file ${req.path}:`, err);
+          logger.error(`   Attempted path: ${absolutePath}`);
+          res.status(404);
+          res.type('application/json');
+          return res.json({ error: 'File not found', path: req.path });
+        }
+      });
+    } else {
+      // File doesn't exist - return 404 JSON, NEVER HTML
+      logger.error(`❌ Static file not found: ${req.path} at ${filePath}`);
+      res.status(404);
+      res.type('application/json');
+      return res.json({ 
+        error: 'File not found',
+        path: req.path
+      });
+    }
+  }
+  
+  next();
+});
+
 if (existsSync(frontendDistPath)) {
   // CRITICAL: Serve static assets with explicit MIME types
   // This MUST come BEFORE any other routes to prevent SPA fallback from catching JS files
   // Use express.static with explicit MIME type handling
-  // CRITICAL: Serve static files FIRST - before any other middleware
-  // This ensures JS files are served with correct MIME type
   app.use(express.static(frontendDistPath, {
     setHeaders: (res, filePath, stat) => {
       const ext = extname(filePath).toLowerCase();
