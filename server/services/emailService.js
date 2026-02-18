@@ -65,25 +65,34 @@ function initializeTransporter() {
  * Formats order data into HTML email format
  */
 function formatOrderEmailHTML(orderData, orderId = null) {
-  const {
-    firstName,
-    lastName,
-    address,
-    city,
-    caza,
-    phone,
-    email,
-    country,
-    items,
-    shippingCost,
-    totalPrice,
-    paymentMethod,
-    shippingMethod
-  } = orderData;
+  // Defensive checks
+  if (!orderData || typeof orderData !== 'object') {
+    throw new Error('Invalid order data provided to formatOrderEmailHTML');
+  }
 
-  // Calculate subtotal
-  const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const {
+    firstName = '',
+    lastName = '',
+    address = '',
+    city = '',
+    caza = '',
+    phone = '',
+    email = '',
+    country = 'Lebanon',
+    items = [],
+    shippingCost = 0,
+    totalPrice: providedTotalPrice,
+    subtotal: providedSubtotal,
+    paymentMethod = 'Cash on Delivery',
+    shippingMethod = 'Express Delivery (2-3 Working Days)'
+  } = orderData || {};
+
+  // Use provided subtotal or calculate if not available
+  const subtotal = providedSubtotal ?? (items?.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 0)), 0) || 0);
+  const totalItems = items?.reduce((sum, item) => sum + (item?.quantity || 0), 0) || 0;
+  
+  // Ensure totalPrice is defined (use calculated if not provided)
+  const finalTotalPrice = providedTotalPrice ?? (subtotal + (Number(shippingCost) || 0));
 
   // Format timestamp
   const now = new Date();
@@ -221,7 +230,7 @@ function formatOrderEmailHTML(orderData, orderId = null) {
           <div class="section-title">💰 Order Summary</div>
           <p>Subtotal: $${subtotal.toFixed(2)}</p>
           ${shippingCost && shippingCost > 0 ? `<p>Shipping Cost: $${shippingCost.toFixed(2)}</p>` : ''}
-          <p class="total">TOTAL: $${totalPrice.toFixed(2)}</p>
+          <p class="total">TOTAL: $${finalTotalPrice.toFixed(2)}</p>
         </div>
       </div>
 
@@ -238,24 +247,34 @@ function formatOrderEmailHTML(orderData, orderId = null) {
  * Formats order data into plain text email format
  */
 function formatOrderEmailText(orderData, orderId = null) {
-  const {
-    firstName,
-    lastName,
-    address,
-    city,
-    caza,
-    phone,
-    email,
-    country,
-    items,
-    shippingCost,
-    totalPrice,
-    paymentMethod,
-    shippingMethod
-  } = orderData;
+  // Defensive checks
+  if (!orderData || typeof orderData !== 'object') {
+    throw new Error('Invalid order data provided to formatOrderEmailText');
+  }
 
-  const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const {
+    firstName = '',
+    lastName = '',
+    address = '',
+    city = '',
+    caza = '',
+    phone = '',
+    email = '',
+    country = 'Lebanon',
+    items = [],
+    shippingCost = 0,
+    totalPrice: providedTotalPrice,
+    subtotal: providedSubtotal,
+    paymentMethod = 'Cash on Delivery',
+    shippingMethod = 'Express Delivery (2-3 Working Days)'
+  } = orderData || {};
+
+  // Use provided subtotal or calculate if not available
+  const subtotal = providedSubtotal ?? (items?.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 0)), 0) || 0);
+  const totalItems = items?.reduce((sum, item) => sum + (item?.quantity || 0), 0) || 0;
+  
+  // Ensure totalPrice is defined (use calculated if not provided)
+  const finalTotalPrice = providedTotalPrice ?? (subtotal + (Number(shippingCost) || 0));
 
   const now = new Date();
   const timestamp = now.toLocaleString('en-US', {
@@ -299,7 +318,7 @@ function formatOrderEmailText(orderData, orderId = null) {
   if (shippingCost && shippingCost > 0) {
     text += `Shipping Cost: $${shippingCost.toFixed(2)}\n`;
   }
-  text += `TOTAL: $${totalPrice.toFixed(2)}\n\n`;
+  text += `TOTAL: $${finalTotalPrice.toFixed(2)}\n\n`;
 
   text += `━━━━━━━━━━━━━━━━━━━━\n`;
   text += `Action Required: Process this order 📦\n`;
@@ -311,25 +330,34 @@ function formatOrderEmailText(orderData, orderId = null) {
  * Formats customer confirmation email into HTML format
  */
 function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
-  const {
-    firstName,
-    lastName,
-    address,
-    city,
-    caza,
-    phone,
-    email,
-    country,
-    items,
-    shippingCost,
-    totalPrice,
-    paymentMethod,
-    shippingMethod
-  } = orderData;
+  // Defensive checks
+  if (!orderData || typeof orderData !== 'object') {
+    throw new Error('Invalid order data provided to formatCustomerConfirmationEmailHTML');
+  }
 
-  // Calculate subtotal
-  const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const {
+    firstName = '',
+    lastName = '',
+    address = '',
+    city = '',
+    caza = '',
+    phone = '',
+    email = '',
+    country = 'Lebanon',
+    items = [],
+    shippingCost = 0,
+    totalPrice: providedTotalPrice,
+    subtotal: providedSubtotal,
+    paymentMethod = 'Cash on Delivery',
+    shippingMethod = 'Express Delivery (2-3 Working Days)'
+  } = orderData || {};
+
+  // Use provided subtotal or calculate if not available
+  const subtotal = providedSubtotal ?? (items?.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 0)), 0) || 0);
+  const totalItems = items?.reduce((sum, item) => sum + (item?.quantity || 0), 0) || 0;
+  
+  // Ensure totalPrice is defined (use calculated if not provided)
+  const finalTotalPrice = providedTotalPrice ?? (subtotal + (Number(shippingCost) || 0));
 
   // Format timestamp
   const now = new Date();
@@ -487,7 +515,7 @@ function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
           <div class="section-title">💰 Order Summary</div>
           <p>Subtotal: $${subtotal.toFixed(2)}</p>
           ${shippingCost && shippingCost > 0 ? `<p>Shipping Cost: $${shippingCost.toFixed(2)}</p>` : ''}
-          <p class="total">TOTAL: $${totalPrice.toFixed(2)}</p>
+          <p class="total">TOTAL: $${finalTotalPrice.toFixed(2)}</p>
         </div>
 
         <div class="section">
@@ -519,24 +547,34 @@ function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
  * Formats customer confirmation email into plain text format
  */
 function formatCustomerConfirmationEmailText(orderData, orderId = null) {
-  const {
-    firstName,
-    lastName,
-    address,
-    city,
-    caza,
-    phone,
-    email,
-    country,
-    items,
-    shippingCost,
-    totalPrice,
-    paymentMethod,
-    shippingMethod
-  } = orderData;
+  // Defensive checks
+  if (!orderData || typeof orderData !== 'object') {
+    throw new Error('Invalid order data provided to formatCustomerConfirmationEmailText');
+  }
 
-  const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const {
+    firstName = '',
+    lastName = '',
+    address = '',
+    city = '',
+    caza = '',
+    phone = '',
+    email = '',
+    country = 'Lebanon',
+    items = [],
+    shippingCost = 0,
+    totalPrice: providedTotalPrice,
+    subtotal: providedSubtotal,
+    paymentMethod = 'Cash on Delivery',
+    shippingMethod = 'Express Delivery (2-3 Working Days)'
+  } = orderData || {};
+
+  // Use provided subtotal or calculate if not available
+  const subtotal = providedSubtotal ?? (items?.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 0)), 0) || 0);
+  const totalItems = items?.reduce((sum, item) => sum + (item?.quantity || 0), 0) || 0;
+  
+  // Ensure totalPrice is defined (use calculated if not provided)
+  const finalTotalPrice = providedTotalPrice ?? (subtotal + (Number(shippingCost) || 0));
 
   const now = new Date();
   const timestamp = now.toLocaleString('en-US', {
@@ -580,7 +618,7 @@ function formatCustomerConfirmationEmailText(orderData, orderId = null) {
   if (shippingCost && shippingCost > 0) {
     text += `Shipping Cost: $${shippingCost.toFixed(2)}\n`;
   }
-  text += `TOTAL: $${totalPrice.toFixed(2)}\n\n`;
+  text += `TOTAL: $${finalTotalPrice.toFixed(2)}\n\n`;
 
   text += `📍 DELIVERY ADDRESS\n`;
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;

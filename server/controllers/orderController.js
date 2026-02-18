@@ -19,7 +19,37 @@ import { ERROR_MESSAGES, ORDER_CONFIG } from '../utils/constants.js';
  */
 export async function createOrder(req, res, next) {
   try {
+    // Log incoming request for debugging
+    logger.info('Checkout request received', {
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      contentType: req.get('content-type'),
+      method: req.method,
+      url: req.originalUrl
+    });
+
     const orderData = req.body;
+    
+    // Validate request body exists
+    if (!orderData || typeof orderData !== 'object') {
+      logger.error('Invalid request body', { body: req.body });
+      throw new ApiError(400, 'Invalid request body. Please check your order data.');
+    }
+    
+    // Validate required fields
+    if (!orderData.items || !Array.isArray(orderData.items) || orderData.items.length === 0) {
+      logger.warn('Order validation failed: no items', { orderData });
+      throw new ApiError(400, 'Order must contain at least one item');
+    }
+
+    if (!orderData.firstName || !orderData.lastName || !orderData.phone) {
+      logger.warn('Order validation failed: missing required fields', {
+        hasFirstName: !!orderData.firstName,
+        hasLastName: !!orderData.lastName,
+        hasPhone: !!orderData.phone
+      });
+      throw new ApiError(400, 'Missing required fields: firstName, lastName, or phone');
+    }
     
     // Generate order ID
     const orderId = generateOrderId();
@@ -42,26 +72,26 @@ export async function createOrder(req, res, next) {
       throw new ApiError(400, 'Total price mismatch. Please refresh and try again.');
     }
 
-    // Create order object
+    // Create order object with all required fields
     const orderObject = {
       orderId,
-      firstName: orderData.firstName,
-      lastName: orderData.lastName,
-      email: orderData.email,
+      firstName: orderData.firstName || '',
+      lastName: orderData.lastName || '',
+      email: orderData.email || '',
       phone: formattedPhone,
-      address: orderData.address,
-      city: orderData.city,
-      caza: orderData.caza,
+      address: orderData.address || '',
+      city: orderData.city || '',
+      caza: orderData.caza || '',
       country: orderData.country || 'Lebanon',
-      items: orderData.items,
+      items: orderData.items || [],
       subtotal,
-      shippingCost: orderData.shippingCost || 0,
-      totalPrice,
+      shippingCost: shippingCost,
+      totalPrice: calculatedTotal,
       paymentMethod: orderData.paymentMethod || ORDER_CONFIG.PAYMENT_METHODS.CASH_ON_DELIVERY,
       shippingMethod: orderData.shippingMethod || ORDER_CONFIG.SHIPPING_METHODS.EXPRESS,
-      notes: orderData.notes,
+      notes: orderData.notes || '',
       ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
+      userAgent: req.get('user-agent') || '',
       status: ORDER_CONFIG.STATUS.PENDING,
       notifications: {
         whatsappSent: false,
@@ -72,10 +102,22 @@ export async function createOrder(req, res, next) {
     };
 
     logger.info(`Processing order ${orderId}...`);
-    logger.info(`Sending WhatsApp notification to customer: ${formattedPhone}`);
+    logger.info(`Order total: $${calculatedTotal}, Items: ${orderData.items.length}`);
 
-    // Send notifications (non-blocking)
-    const notifications = await sendNotifications(orderData, orderId, formattedPhone);
+    // Send notifications (non-blocking) - wrap in try-catch to prevent errors from breaking the response
+    let notifications = {
+      customerNotification: { success: false },
+      ownerNotification: { success: false },
+      emailNotification: { success: false },
+      customerEmailNotification: { success: false }
+    };
+
+    try {
+      notifications = await sendNotifications(orderObject, orderId, formattedPhone);
+    } catch (notificationError) {
+      // Log but don't fail the order if notifications fail
+      logger.error('Notification error (non-critical):', notificationError);
+    }
 
     // Return success response
     res.status(201).json({
@@ -91,7 +133,34 @@ export async function createOrder(req, res, next) {
     });
 
   } catch (error) {
-    next(error);
+    // Enhanced error logging
+    logger.error('Checkout route error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      statusCode: error.statusCode,
+      orderData: req.body ? {
+        hasItems: !!req.body.items,
+        itemsCount: req.body.items?.length,
+        hasFirstName: !!req.body.firstName,
+        hasLastName: !!req.body.lastName,
+        hasPhone: !!req.body.phone,
+        hasTotalPrice: typeof req.body.totalPrice !== 'undefined',
+        totalPrice: req.body.totalPrice
+      } : null
+    });
+
+    // If it's already an ApiError, pass it through
+    if (error instanceof ApiError) {
+      return next(error);
+    }
+
+    // For unexpected errors, wrap them
+    const apiError = new ApiError(
+      error.statusCode || 500,
+      error.message || 'An unexpected error occurred while processing your order'
+    );
+    next(apiError);
   }
 }
 

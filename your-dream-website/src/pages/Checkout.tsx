@@ -113,27 +113,64 @@ const Checkout = () => {
       return;
     }
 
+    // Guard: Ensure cart has items
+    if (!items || items.length === 0) {
+      toast({
+        title: "Cart is empty",
+        description: "Please add items to your cart before checkout.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      // Calculate shipping cost
       const shippingCost = formData.caza === "North Lebanon" ? 2.0 : 3.0;
-      const subtotal = Math.round(getTotalPrice() * 100) / 100;
-      const totalPrice = Math.round((subtotal + shippingCost) * 100) / 100;
+      
+      // Calculate subtotal safely from cart items
+      const subtotal = (items ?? []).reduce((sum, item) => {
+        const price = Number(item?.price) || 0;
+        const qty = Number(item?.quantity) || 1;
+        return sum + price * qty;
+      }, 0);
+      
+      // Calculate total price with rounding
+      const calculatedSubtotal = Math.round(subtotal * 100) / 100;
+      const calculatedShipping = Math.round(shippingCost * 100) / 100;
+      const totalPrice = Math.round((calculatedSubtotal + calculatedShipping) * 100) / 100;
+
+      // Validate total price
+      if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
+        throw new Error("Invalid total price. Please refresh and try again.");
+      }
+
+      // Map items safely
+      const orderItems = items.map((item) => ({
+        id: item?.id || '',
+        name: item?.name || '',
+        price: Number(item?.price) || 0,
+        quantity: Number(item?.quantity) || 1,
+        size: item?.size || '',
+        image: item?.image || '',
+      }));
 
       const orderData = {
-        ...formData,
-        items: items.map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          size: item.size,
-          image: item.image,
-        })),
-        shippingCost,
-        totalPrice,
-        paymentMethod,
+        firstName: formData.firstName || '',
+        lastName: formData.lastName || '',
+        email: formData.email || '',
+        phone: formData.phone || '',
+        address: formData.address || '',
+        city: formData.city || '',
+        caza: formData.caza || '',
+        country: formData.country || 'Lebanon',
+        items: orderItems,
+        shippingCost: calculatedShipping,
+        totalPrice: totalPrice,
+        paymentMethod: paymentMethod || 'Cash on Delivery',
         shippingMethod: "Delivery (2-3 Working Days)",
+        notes: '',
       };
 
 

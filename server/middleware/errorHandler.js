@@ -96,6 +96,19 @@ export function errorHandler(err, req, res, next) {
     error = new ApiError(401, message);
   }
 
+  // ReferenceError (undefined variable) - don't expose internal errors
+  if (err.name === 'ReferenceError') {
+    logger.error('ReferenceError detected:', {
+      message: err.message,
+      stack: err.stack,
+      variable: err.message.match(/(\w+) is not defined/)?.[1],
+      url: req.originalUrl
+    });
+    // Don't expose the actual variable name to client for security
+    const message = 'Server error occurred while processing your order. Please try again or contact support.';
+    error = new ApiError(500, message);
+  }
+
   const statusCode = error.statusCode || 500;
   const message = error.message || 'Internal Server Error';
 

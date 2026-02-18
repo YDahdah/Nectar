@@ -4,24 +4,33 @@ import logger from '../utils/logger.js';
  * Formats order data into a readable message with ALL details
  */
 function formatOrderMessage(orderData, orderId = null) {
-  const { 
-    firstName, 
-    lastName, 
-    address, 
-    city, 
-    caza, 
-    phone, 
-    country, 
-    items, 
-    shippingCost, 
-    totalPrice, 
-    paymentMethod, 
-    shippingMethod 
-  } = orderData;
+  // Defensive checks
+  if (!orderData || typeof orderData !== 'object') {
+    throw new Error('Invalid order data provided to formatOrderMessage');
+  }
 
-  // Calculate subtotal
-  const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const { 
+    firstName = '', 
+    lastName = '', 
+    address = '', 
+    city = '', 
+    caza = '', 
+    phone = '', 
+    country = 'Lebanon', 
+    items = [], 
+    shippingCost = 0, 
+    totalPrice: providedTotalPrice, 
+    subtotal: providedSubtotal,
+    paymentMethod = 'Cash on Delivery', 
+    shippingMethod = 'Express Delivery (2-3 Working Days)' 
+  } = orderData || {};
+
+  // Use provided subtotal or calculate if not available
+  const calculatedSubtotal = providedSubtotal ?? (items?.reduce((sum, item) => sum + ((item?.price || 0) * (item?.quantity || 0)), 0) || 0);
+  const totalItems = items?.reduce((sum, item) => sum + (item?.quantity || 0), 0) || 0;
+  
+  // Ensure totalPrice is defined (use calculated if not provided)
+  const finalTotalPrice = providedTotalPrice ?? (calculatedSubtotal + (Number(shippingCost) || 0));
 
   // Format timestamp
   const now = new Date();
@@ -103,11 +112,11 @@ function formatOrderMessage(orderData, orderId = null) {
   // Order Summary
   message += `💰 *ORDER SUMMARY*\n`;
   message += `━━━━━━━━━━━━━━━━━━━━\n`;
-  message += `Subtotal: $${subtotal.toFixed(2)}\n`;
+  message += `Subtotal: $${calculatedSubtotal.toFixed(2)}\n`;
   if (shippingCost && shippingCost > 0) {
     message += `Shipping Cost: $${shippingCost.toFixed(2)}\n`;
   }
-  message += `*TOTAL: $${totalPrice.toFixed(2)}*\n`;
+  message += `*TOTAL: $${finalTotalPrice.toFixed(2)}*\n`;
   message += `\n`;
 
   // Shipping & Payment
@@ -138,7 +147,8 @@ function formatOrderMessage(orderData, orderId = null) {
  * Logs order notification to console
  */
 export async function sendOrderNotification(phoneNumber, orderData, orderId = null) {
-  const message = formatOrderMessage(orderData, orderId);
+  try {
+    const message = formatOrderMessage(orderData, orderId);
 
   // Log to console
   logger.info('\n' + '='.repeat(50));
@@ -150,9 +160,13 @@ export async function sendOrderNotification(phoneNumber, orderData, orderId = nu
   logger.info(message);
   logger.info('='.repeat(50) + '\n');
 
-  return {
-    success: true,
-    method: 'console',
-    message: 'Order logged to console'
-  };
+    return {
+      success: true,
+      method: 'console',
+      message: 'Order logged to console'
+    };
+  } catch (error) {
+    logger.error('Error formatting order message:', error);
+    throw error;
+  }
 }
