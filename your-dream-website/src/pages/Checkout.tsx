@@ -649,7 +649,7 @@ const Checkout = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm text-card-foreground">
-                    Email <span className="text-muted-foreground font-normal">(Optional)</span>
+                    Email
                   </Label>
                   <Input
                     id="email"
@@ -661,6 +661,7 @@ const Checkout = () => {
                       }`}
                     aria-describedby={formErrors.email ? "email-error" : undefined}
                     aria-invalid={!!formErrors.email}
+                    required
                   />
                   {formErrors.email && (
                     <p id="email-error" className="text-sm text-red-500" role="alert">
