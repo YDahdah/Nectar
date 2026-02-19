@@ -32,7 +32,7 @@ const testOrderData = {
   shippingCost: 3.00,
   totalPrice: 53.00,
   paymentMethod: 'Cash on Delivery',
-  shippingMethod: 'Express Delivery (2-3 Working Days)'
+  shippingMethod: 'Delivery (2-4 days)'
 };
 
 const testOrderId = `TEST-CUSTOMER-${Date.now()}`;

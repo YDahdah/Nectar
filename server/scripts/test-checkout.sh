@@ -30,7 +30,7 @@ ORDER_DATA='{
   "shippingCost": 2.0,
   "totalPrice": 8.99,
   "paymentMethod": "Cash on Delivery",
-  "shippingMethod": "Express Delivery (2-3 Working Days)"
+  "shippingMethod": "Delivery (2-4 days)"
 }'
 
 echo "Sending test order..."

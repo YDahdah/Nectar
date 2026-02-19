@@ -22,7 +22,7 @@ function formatOrderMessage(orderData, orderId = null) {
     totalPrice: providedTotalPrice, 
     subtotal: providedSubtotal,
     paymentMethod = 'Cash on Delivery', 
-    shippingMethod = 'Express Delivery (2-3 Working Days)' 
+    shippingMethod = 'Delivery (2-4 days)' 
   } = orderData || {};
 
   // Use provided subtotal or calculate if not available
@@ -122,7 +122,7 @@ function formatOrderMessage(orderData, orderId = null) {
   // Shipping & Payment
   message += `🚚 *SHIPPING DETAILS*\n`;
   message += `━━━━━━━━━━━━━━━━━━━━\n`;
-  message += `Method: ${shippingMethod || 'Express Delivery (2-3 Working Days)'}\n`;
+  message += `Method: ${shippingMethod || 'Delivery (2-4 days)'}\n`;
   message += `\n`;
 
   message += `💳 *PAYMENT DETAILS*\n`;

@@ -169,7 +169,7 @@ const Checkout = () => {
         shippingCost: calculatedShipping,
         totalPrice: totalPrice,
         paymentMethod: paymentMethod || 'Cash on Delivery',
-        shippingMethod: "Delivery (2-3 Working Days)",
+        shippingMethod: "Delivery (2-4 days)",
         notes: '',
       };
 
@@ -675,7 +675,7 @@ const Checkout = () => {
               <div className="space-y-4">
                 <h2 className="text-base font-normal text-card-foreground">Shipping method</h2>
                 <div className="border border-border rounded-md p-4 flex items-center justify-between bg-card">
-                  <span className="text-sm text-card-foreground">Delivery (2-3 Working Days)</span>
+                  <span className="text-sm text-card-foreground">Delivery (2-4 days)</span>
                   <span className="text-sm font-normal text-card-foreground">${shippingCost.toFixed(2)}</span>
                 </div>
               </div>
@@ -703,7 +703,7 @@ const Checkout = () => {
                 <h2 className="text-base font-normal text-card-foreground">Review your order</h2>
                 <div className="bg-muted/30 rounded-md p-4 space-y-2 text-xs sm:text-sm break-words">
                   <p><span className="text-muted-foreground">Delivery:</span> {formData.firstName} {formData.lastName}, {formData.address}, {formData.city}, {formData.caza}. {formData.phone}{formData.email ? ` · ${formData.email}` : ''}</p>
-                  <p><span className="text-muted-foreground">Shipping:</span> Delivery (2-3 Working Days) — ${shippingCost.toFixed(2)}</p>
+                  <p><span className="text-muted-foreground">Shipping:</span> Delivery (2-4 days) — ${shippingCost.toFixed(2)}</p>
                   <p><span className="text-muted-foreground">Payment:</span> Cash on Delivery (COD)</p>
                 </div>
               </div>

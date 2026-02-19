@@ -50,7 +50,7 @@ export const ORDER = {
     BANK_TRANSFER: 'Bank Transfer',
   } as const,
   SHIPPING_METHODS: {
-    EXPRESS: 'Express Delivery (2-3 Working Days)',
+    EXPRESS: 'Delivery (2-4 days)',
     STANDARD: 'Standard Delivery (5-7 Working Days)',
   } as const,
 } as const;

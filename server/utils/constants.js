@@ -65,7 +65,7 @@ export const ORDER_CONFIG = {
     BANK_TRANSFER: 'Bank Transfer',
   },
   SHIPPING_METHODS: {
-    EXPRESS: 'Express Delivery (2-3 Working Days)',
+    EXPRESS: 'Delivery (2-4 days)',
     STANDARD: 'Standard Delivery (5-7 Working Days)',
   },
   MAX_ITEMS: 50,

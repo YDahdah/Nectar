@@ -102,7 +102,7 @@ const OrderConfirmation = () => {
                     Processing & Shipping
                   </h3>
                   <p className="text-sm text-gray-600">
-                    Your order will be processed and shipped within 2-3 working days via Express Delivery.
+                    Your order will be processed and shipped within 2-4 days.
                   </p>
                 </div>
               </div>

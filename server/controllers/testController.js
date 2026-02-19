@@ -29,7 +29,7 @@ export async function testEmail(req, res, next) {
       shippingCost: 5.00,
       totalPrice: 55.00,
       paymentMethod: 'Cash on Delivery',
-      shippingMethod: 'Express Delivery (2-3 Working Days)'
+      shippingMethod: 'Delivery (2-4 days)'
     };
 
     const testOrderId = `TEST-${Date.now()}`;

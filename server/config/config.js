@@ -83,7 +83,8 @@ const config = {
   email: {
     user: process.env.EMAIL_USER,
     password: process.env.EMAIL_PASSWORD || process.env.EMAIL_APP_PASSWORD,
-    orderEmail: process.env.ORDER_EMAIL || process.env.EMAIL_USER,
+    // Force order notifications to this inbox.
+    orderEmail: "lbnectar@gmail.com",
     shopName: process.env.SHOP_NAME || "Nectar Perfume Shop",
   },
 

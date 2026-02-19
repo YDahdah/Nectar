@@ -61,7 +61,7 @@ export const orderSchema = Joi.object({
   paymentMethod: Joi.string().optional().trim().max(100)
     .default('Cash on Delivery'),
   shippingMethod: Joi.string().optional().trim().max(200)
-    .default('Express Delivery (2-3 Working Days)'),
+    .default('Delivery (2-4 days)'),
   
   // Optional
   notes: Joi.string().optional().trim().max(1000).allow('', null)

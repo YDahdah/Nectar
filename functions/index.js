@@ -69,7 +69,7 @@ exports.createOrder = onRequest(
             shippingCost = 0,
             totalPrice,
             paymentMethod = "Cash on Delivery",
-            shippingMethod = "Express Delivery (2-3 Working Days)",
+            shippingMethod = "Delivery (2-4 days)",
             notes,
           } = orderData;
 

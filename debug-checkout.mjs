@@ -83,7 +83,7 @@ async function main() {
         shippingCost: 3.00,
         totalPrice: 53.00,
         paymentMethod: "Cash on Delivery",
-        shippingMethod: "Express Delivery (2-3 Working Days)"
+        shippingMethod: "Delivery (2-4 days)"
       },
     },
     {
@@ -108,7 +108,7 @@ async function main() {
         shippingCost: 3.00,
         totalPrice: 53.00,
         paymentMethod: "Cash on Delivery",
-        shippingMethod: "Express Delivery (2-3 Working Days)",
+        shippingMethod: "Delivery (2-4 days)",
         notes: ""
       },
     },
@@ -139,7 +139,7 @@ async function main() {
         shippingCost: 3.00,
         totalPrice: 88.00, // (30*2 + 25) + 3
         paymentMethod: "Cash on Delivery",
-        shippingMethod: "Express Delivery (2-3 Working Days)"
+        shippingMethod: "Delivery (2-4 days)"
       },
     },
   ];

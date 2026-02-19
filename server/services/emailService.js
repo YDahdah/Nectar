@@ -128,7 +128,7 @@ function formatOrderEmailHTML(orderData, orderId = null) {
     totalPrice: providedTotalPrice,
     subtotal: providedSubtotal,
     paymentMethod = 'Cash on Delivery',
-    shippingMethod = 'Express Delivery (2-3 Working Days)'
+    shippingMethod = 'Delivery (2-4 days)'
   } = orderData || {};
 
   // Use provided subtotal or calculate if not available
@@ -310,7 +310,7 @@ function formatOrderEmailText(orderData, orderId = null) {
     totalPrice: providedTotalPrice,
     subtotal: providedSubtotal,
     paymentMethod = 'Cash on Delivery',
-    shippingMethod = 'Express Delivery (2-3 Working Days)'
+    shippingMethod = 'Delivery (2-4 days)'
   } = orderData || {};
 
   // Use provided subtotal or calculate if not available
@@ -393,7 +393,7 @@ function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
     totalPrice: providedTotalPrice,
     subtotal: providedSubtotal,
     paymentMethod = 'Cash on Delivery',
-    shippingMethod = 'Express Delivery (2-3 Working Days)'
+    shippingMethod = 'Delivery (2-4 days)'
   } = orderData || {};
 
   // Use provided subtotal or calculate if not available
@@ -520,7 +520,7 @@ function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
           <div class="section-title">📋 Order Details</div>
           <p><strong>Order ID:</strong> ${orderId || 'N/A'}</p>
           <p><strong>Order Date:</strong> ${timestamp}</p>
-          <p><strong>Shipping Method:</strong> ${shippingMethod || 'Express Delivery (2-3 Working Days)'}</p>
+          <p><strong>Shipping Method:</strong> ${shippingMethod || 'Delivery (2-4 days)'}</p>
           ${paymentMethod ? `<p><strong>Payment Method:</strong> ${paymentMethod}</p>` : ''}
         </div>
 
@@ -573,7 +573,7 @@ function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
         <div class="info-box">
           <strong>📬 What's Next?</strong><br>
           We're processing your order and will contact you soon via WhatsApp to confirm the details. 
-          Your order will be delivered within 2-3 working days.
+          Your order will be delivered within 2-4 days.
         </div>
       </div>
 
@@ -610,7 +610,7 @@ function formatCustomerConfirmationEmailText(orderData, orderId = null) {
     totalPrice: providedTotalPrice,
     subtotal: providedSubtotal,
     paymentMethod = 'Cash on Delivery',
-    shippingMethod = 'Express Delivery (2-3 Working Days)'
+    shippingMethod = 'Delivery (2-4 days)'
   } = orderData || {};
 
   // Use provided subtotal or calculate if not available
@@ -639,7 +639,7 @@ function formatCustomerConfirmationEmailText(orderData, orderId = null) {
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   text += `Order ID: ${orderId || 'N/A'}\n`;
   text += `Order Date: ${timestamp}\n`;
-  text += `Shipping Method: ${shippingMethod || 'Express Delivery (2-3 Working Days)'}\n`;
+  text += `Shipping Method: ${shippingMethod || 'Delivery (2-4 days)'}\n`;
   if (paymentMethod) {
     text += `Payment Method: ${paymentMethod}\n`;
   }
@@ -674,7 +674,7 @@ function formatCustomerConfirmationEmailText(orderData, orderId = null) {
   text += `📬 WHAT'S NEXT?\n`;
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   text += `We're processing your order and will contact you soon via WhatsApp to confirm the details. `;
-  text += `Your order will be delivered within 2-3 working days.\n\n`;
+  text += `Your order will be delivered within 2-4 days.\n\n`;
 
   text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   text += `Thank you for shopping with Nectar Perfume Shop! 🛍️\n`;
