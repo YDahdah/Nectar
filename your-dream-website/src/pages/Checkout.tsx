@@ -174,19 +174,13 @@ const Checkout = () => {
       };
 
 
-      // IMPORTANT: Use local server endpoint for full email functionality
-      // Cloud Function doesn't send customer emails or return notifications
+      // Use production API endpoint (Ubuntu server)
       const orderEndpoint = `${API_BASE}/orders/checkout`;
       
       // Log which endpoint is being used
       console.log('📡 Checkout endpoint:', orderEndpoint);
       console.log('   API_BASE:', API_BASE);
-      console.log('   Using local server for full email support');
-      
-      // Warn if Cloud Function URL is set (it will be ignored)
-      if (CLOUD_FUNCTION_URL) {
-        console.warn('⚠️ CLOUD_FUNCTION_URL is set but will be ignored. Using local server instead.');
-      }
+      console.log('   Using production server (Ubuntu) for email support');
 
       let response: Response;
       try {
