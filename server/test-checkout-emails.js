@@ -11,8 +11,8 @@ import { sendOrderEmail, sendCustomerConfirmationEmail } from './services/emailS
 import logger from './utils/logger.js';
 
 // Use real email addresses for testing
-const ownerEmail = process.env.ORDER_EMAIL || process.env.EMAIL_USER || 'youssefdahdah44@gmail.com';
-const customerEmail = process.env.TEST_CUSTOMER_EMAIL || 'youssefdahdah44@gmail.com'; // Use your email for testing
+const ownerEmail = process.env.ORDER_EMAIL || process.env.EMAIL_USER || 'lbnectar@gmail.com';
+const customerEmail = process.env.TEST_CUSTOMER_EMAIL || 'lbnectar@gmail.com'; // Use your email for testing
 
 const testOrderData = {
   firstName: 'Test',
