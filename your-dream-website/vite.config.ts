@@ -21,9 +21,11 @@ export default defineConfig(({ mode }) => ({
     // Proxy API requests in dev. Set VITE_PROXY_TARGET to use local backend (e.g. http://localhost:3000).
     proxy: {
       '/api': {
-        target: process.env.VITE_PROXY_TARGET || 'https://api.perfumenectar.com',
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
         changeOrigin: true,
-        secure: process.env.VITE_PROXY_TARGET?.startsWith('https') !== true,
+        secure: false,
+        // Keep the /api prefix when forwarding to backend
+        rewrite: (path) => path,
       },
     },
   },

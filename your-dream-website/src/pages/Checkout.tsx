@@ -176,7 +176,7 @@ const Checkout = () => {
 
       const orderEndpoint = CLOUD_FUNCTION_URL
         ? CLOUD_FUNCTION_URL
-        : `${API_BASE}/api/orders/checkout`;
+        : `${API_BASE}/orders/checkout`;
 
       let response: Response;
       try {

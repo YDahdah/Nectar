@@ -5,24 +5,49 @@ import logger from '../utils/logger.js';
  * Validate order data middleware
  */
 export function validateOrderData(req, res, next) {
-  const validation = validateOrder(req.body);
-  
-  if (!validation.isValid) {
-    logger.warn('Order validation failed:', {
-      errors: validation.errors,
-      ip: req.ip
+  try {
+    // Log incoming data for debugging
+    logger.info('Validating order data:', {
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      hasItems: !!req.body?.items,
+      itemsCount: req.body?.items?.length || 0,
+      hasFirstName: !!req.body?.firstName,
+      hasLastName: !!req.body?.lastName,
+      hasPhone: !!req.body?.phone
     });
-    const firstMessage = validation.errors?.[0]?.message || 'Validation failed';
-    return res.status(400).json({
+
+    const validation = validateOrder(req.body);
+    
+    if (!validation.isValid) {
+      logger.warn('Order validation failed:', {
+        errors: validation.errors,
+        ip: req.ip,
+        body: req.body
+      });
+      const firstMessage = validation.errors?.[0]?.message || 'Validation failed';
+      return res.status(400).json({
+        success: false,
+        error: firstMessage,
+        errors: validation.errors
+      });
+    }
+    
+    // Replace req.body with sanitized and validated data
+    req.body = validation.data;
+    next();
+  } catch (error) {
+    logger.error('Validation middleware error:', {
+      error: error.message,
+      stack: error.stack,
+      body: req.body
+    });
+    return res.status(500).json({
       success: false,
-      error: firstMessage,
-      errors: validation.errors
+      error: 'Validation error: ' + error.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
   }
-  
-  // Replace req.body with sanitized and validated data
-  req.body = validation.data;
-  next();
 }
 
 /**

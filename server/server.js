@@ -57,15 +57,21 @@ const corsOriginValidator = (origin) => {
 // CORS origin validation for cors middleware (callback-based)
 // When credentials: true we MUST return exact origin (not *)
 const corsOriginValidatorCallback = (origin, callback) => {
+  // Always log CORS validation attempts for debugging
+  logger.info(`CORS check: origin=${origin || 'none'}, allowed=${corsOrigins.join(', ')}`);
+  
   if (!origin) {
+    // For non-browser requests (like curl, Postman), allow but don't set CORS headers
     callback(null, true);
     return;
   }
+  
   if (corsOriginValidator(origin)) {
+    logger.info(`✅ CORS allowed: ${origin}`);
     callback(null, origin);
   } else {
-    logger.warn(`CORS blocked origin: ${origin}. Allowed: ${corsOrigins.join(", ")}`);
-    callback(null, false);
+    logger.warn(`❌ CORS blocked origin: ${origin}. Allowed origins: ${corsOrigins.join(", ")}`);
+    callback(new Error(`CORS: Origin ${origin} not allowed`), false);
   }
 };
 
@@ -80,7 +86,14 @@ const corsConfig = {
 };
 
 // OPTIONS preflight: let cors middleware return 204/200 with CORS headers (do not use * origin)
-app.options("*", cors(corsConfig));
+// CRITICAL: This must handle OPTIONS requests BEFORE other middleware
+app.options("*", (req, res, next) => {
+  const origin = req.headers.origin;
+  logger.info(`OPTIONS preflight request from origin: ${origin || 'none'}`);
+  
+  // Use cors middleware to handle OPTIONS
+  cors(corsConfig)(req, res, next);
+});
 
 // Helper function to add CORS headers to responses
 const addCorsToResponse = (req, res) => {
@@ -376,6 +389,7 @@ app.get("/api", (req, res) => {
     version: "2.0.0",
     endpoints: {
       health: "/health",
+      apiHealth: "/api/health",
       orders: "/api/orders",
       products: "/api/products",
       newsletter: "/api/newsletter",
@@ -383,6 +397,17 @@ app.get("/api", (req, res) => {
       email: "/api/send-email",
       emailTest: "/api/test-email-config",
     },
+    timestamp: new Date().toISOString(),
+    environment: config.nodeEnv,
+  });
+});
+
+// API health check endpoint (for monitoring/proxies)
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "API is running",
+    uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
   });

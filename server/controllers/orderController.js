@@ -25,7 +25,11 @@ export async function createOrder(req, res, next) {
       bodyKeys: req.body ? Object.keys(req.body) : [],
       contentType: req.get('content-type'),
       method: req.method,
-      url: req.originalUrl
+      url: req.originalUrl,
+      itemsCount: req.body?.items?.length || 0,
+      firstName: req.body?.firstName,
+      lastName: req.body?.lastName,
+      phone: req.body?.phone
     });
 
     const orderData = req.body;
@@ -260,7 +264,7 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
  * Get order by ID
  * Note: Database functionality has been removed. This endpoint returns an error.
  */
-async function getOrderById(req, res, next) {
+export async function getOrderById(req, res, next) {
   try {
     throw new ApiError(503, 'Database service unavailable. Order lookup is not supported.');
   } catch (error) {

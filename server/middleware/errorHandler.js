@@ -51,17 +51,38 @@ function addCorsHeaders(req, res) {
  * IMPORTANT: Must add CORS headers to error responses
  */
 export function errorHandler(err, req, res, next) {
+  // If response was already sent, delegate to default Express error handler
+  if (res.headersSent) {
+    logger.warn('Response already sent, delegating to default error handler');
+    return next(err);
+  }
+
+  // Log the full error for debugging
+  logger.error("🔥 ERROR:", {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    code: err.code,
+    url: req.originalUrl,
+    method: req.method,
+    body: req.body
+  });
+
   let error = { ...err };
   error.message = err.message;
 
-  // Log error
-  logger.error('Error:', {
+  // Log error with full details
+  logger.error('Error occurred:', {
     message: err.message,
     stack: err.stack,
+    name: err.name,
+    code: err.code,
     url: req.originalUrl,
     method: req.method,
     ip: req.ip,
-    userAgent: req.get('user-agent')
+    userAgent: req.get('user-agent'),
+    body: req.body,
+    statusCode: err.statusCode
   });
 
   // Mongoose bad ObjectId
@@ -116,14 +137,30 @@ export function errorHandler(err, req, res, next) {
   // Without this, browser will block error responses even if preflight succeeded
   addCorsHeaders(req, res);
 
+  // Set proper content type
+  res.setHeader('Content-Type', 'application/json');
+
   // Don't expose internal error details in production
   const response = {
     success: false,
     error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      errorName: err.name,
+      errorCode: err.code,
+      url: req.originalUrl,
+      method: req.method
+    })
   };
 
-  res.status(statusCode).json(response);
+  // Ensure we send JSON response
+  try {
+    res.status(statusCode).json(response);
+  } catch (sendError) {
+    logger.error('Failed to send error response:', sendError);
+    // Last resort: try to send plain text
+    res.status(statusCode).send(`Error: ${message}`);
+  }
 }
 
 /**
