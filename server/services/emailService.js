@@ -26,19 +26,31 @@ export function resetTransporter() {
 }
 
 function initializeTransporter() {
-  // Check if credentials have changed and reset if needed
+  // Always check current config values
   const currentEmailUser = config.email.user;
   const currentEmailPassword = config.email.password;
   
-  // If transporter exists but credentials changed, reset it
-  if (transporter && (transporter.options?.auth?.user !== currentEmailUser || 
-                      transporter.options?.auth?.pass !== currentEmailPassword)) {
-    logger.info('🔄 Email credentials changed, resetting transporter...');
-    transporter.close();
-    transporter = null;
+  // If transporter exists, check if credentials have changed
+  if (transporter) {
+    // Get the stored credentials from the transporter
+    const storedUser = transporter.options?.auth?.user;
+    const storedPass = transporter.options?.auth?.pass;
+    
+    // If credentials changed, reset the transporter
+    if (storedUser !== currentEmailUser || storedPass !== currentEmailPassword) {
+      logger.info('🔄 Email credentials changed, resetting transporter...');
+      logger.info(`   Old: ${storedUser || 'N/A'} -> New: ${currentEmailUser || 'N/A'}`);
+      try {
+        transporter.close();
+      } catch (e) {
+        // Ignore errors when closing
+      }
+      transporter = null;
+    } else {
+      // Credentials haven't changed, return cached transporter
+      return transporter;
+    }
   }
-  
-  if (transporter) return transporter;
 
   const emailUser = config.email.user;
   const emailPassword = config.email.password;
