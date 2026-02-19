@@ -1,6 +1,7 @@
 import express from 'express';
 import { sendOrderEmail, sendCustomerConfirmationEmail } from '../services/emailService.js';
 import logger from '../utils/logger.js';
+import config from '../config/config.js';
 
 const router = express.Router();
 
@@ -78,6 +79,38 @@ router.post('/checkout-emails', async (req, res) => {
     res.status(200).json(results);
   } catch (error) {
     logger.error('❌ Test checkout emails error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /test/email-status
+ * Check email configuration and status
+ */
+router.get('/email-status', async (req, res) => {
+  try {
+    const emailConfig = {
+      emailUser: config.email.user ? 'Set' : 'Not set',
+      emailPassword: config.email.password ? 'Set' : 'Not set',
+      orderEmail: config.email.orderEmail || 'Not set',
+      shopName: config.email.shopName || 'Not set'
+    };
+
+    // Try to initialize transporter to check if it works
+    const { initializeTransporter } = await import('../services/emailService.js');
+    const transporter = initializeTransporter();
+    
+    res.status(200).json({
+      success: true,
+      emailConfig,
+      transporterInitialized: transporter !== null,
+      message: transporter ? 'Email service is ready' : 'Email service not configured'
+    });
+  } catch (error) {
+    logger.error('Email status check error:', error);
     res.status(500).json({
       success: false,
       error: error.message
