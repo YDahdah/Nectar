@@ -175,11 +175,17 @@ const Checkout = () => {
 
 
       // Use production API endpoint (Ubuntu server)
-      const orderEndpoint = `${API_BASE}/orders/checkout`;
+      // Backend routes are mounted under /api
+      // If API_BASE already includes /api (like /api for local dev), use it directly
+      // If API_BASE is full URL (like https://api.perfumenectar.com), add /api
+      const orderEndpoint = API_BASE.startsWith('http') 
+        ? `${API_BASE}/api/orders/checkout`  // Production: add /api prefix
+        : `${API_BASE}/orders/checkout`;      // Local dev: API_BASE is already /api
       
       // Log which endpoint is being used
       console.log('📡 Checkout endpoint:', orderEndpoint);
       console.log('   API_BASE:', API_BASE);
+      console.log('   Full URL:', orderEndpoint);
       console.log('   Using production server (Ubuntu) for email support');
 
       let response: Response;

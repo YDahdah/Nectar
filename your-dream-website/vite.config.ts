@@ -27,6 +27,14 @@ export default defineConfig(({ mode }) => ({
         // Keep the /api prefix when forwarding to backend
         rewrite: (path) => path,
       },
+      // Also proxy /orders for backwards compatibility (though /api/orders should be used)
+      '/orders': {
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+        // Rewrite /orders to /api/orders since backend mounts under /api
+        rewrite: (path) => `/api${path}`,
+      },
     },
   },
   plugins: [

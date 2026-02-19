@@ -1,4 +1,6 @@
 // Backend API URL – no local fallback; use VITE_API_BASE_URL or production.
+// If VITE_API_BASE_URL is relative (starts with /), it will use Vite proxy in dev
+// If absolute (starts with http), it will call production server directly
 export const API_BASE =
   typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
     ? (import.meta.env.VITE_API_BASE_URL as string).replace(/\/$/, "")
