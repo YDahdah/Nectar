@@ -6,6 +6,7 @@ import compression from "compression";
 import { fileURLToPath } from "url";
 import { dirname, join, extname, resolve } from "path";
 import { existsSync, readdirSync } from "fs";
+import mime from "mime";
 import config from "./config/config.js";
 import logger from "./utils/logger.js";
 import {
@@ -206,95 +207,78 @@ const __dirname = dirname(__filename);
 // This ensures JavaScript modules are served with correct MIME type
 const frontendDistPath = join(__dirname, '../your-dream-website/dist');
 
-// CRITICAL: Intercept ALL static asset requests FIRST - serve them directly with correct MIME type
-// This runs BEFORE express.static to ensure JS files NEVER get HTML
-app.use((req, res, next) => {
-  const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
-  
-  if (isStaticAsset && existsSync(frontendDistPath)) {
-    // Resolve file path - handle both absolute and relative paths
-    // req.path is like "/assets/js/react-vendor-B984J_S_.js"
-    // We need: frontendDistPath + req.path (join handles the slash correctly)
+// Fix common wrong MIME types for module assets
+mime.define(
+  {
+    'application/javascript': ['js', 'mjs'],
+    'application/wasm': ['wasm'],
+    'text/css': ['css'],
+  },
+  { force: true }
+);
+
+// CRITICAL: Explicitly handle /assets/* paths FIRST - NEVER rewrite to index.html
+// This ensures /assets/*.js files are served with correct MIME type and never fall through to SPA
+if (existsSync(frontendDistPath)) {
+  app.use('/assets', (req, res, next) => {
     const filePath = join(frontendDistPath, req.path);
     
     if (existsSync(filePath)) {
       const ext = extname(filePath).toLowerCase();
       
-      // CRITICAL: Set MIME type BEFORE sending file
+      // Set correct MIME types - CRITICAL for JS modules
       if (ext === '.js' || ext === '.mjs') {
-        res.type('application/javascript');
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        logger.info(`✅ Direct serving JS: ${req.path}`);
+        logger.info(`✅ Serving /assets JS: ${req.path} with Content-Type: application/javascript`);
       } else if (ext === '.css') {
-        res.type('text/css');
         res.setHeader('Content-Type', 'text/css; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (ext === '.wasm') {
+        res.setHeader('Content-Type', 'application/wasm');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       }
       
-      // Send file directly - this prevents any other middleware from interfering
-      // Use absolute path for sendFile
-      const absolutePath = resolve(filePath);
-      return res.sendFile(absolutePath, (err) => {
-        if (err) {
-          logger.error(`Error sending file ${req.path}:`, err);
-          logger.error(`   Attempted path: ${absolutePath}`);
-          res.status(404);
-          res.type('application/json');
-          return res.json({ error: 'File not found', path: req.path });
-        }
-      });
-    } else {
-      // File doesn't exist - return 404 JSON, NEVER HTML
-      logger.error(`❌ Static file not found: ${req.path} at ${filePath}`);
-      res.status(404);
-      res.type('application/json');
-      return res.json({ 
-        error: 'File not found',
-        path: req.path
-      });
+      return res.sendFile(resolve(filePath));
     }
-  }
-  
-  next();
-});
+    
+    // File doesn't exist - return 404 JSON, NEVER HTML
+    logger.error(`❌ Asset not found: ${req.path}`);
+    res.status(404);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.json({ error: 'Asset not found', path: req.path });
+  });
+}
 
 if (existsSync(frontendDistPath)) {
-  // CRITICAL: Serve static assets with explicit MIME types
+  // CRITICAL: Serve static assets FIRST with explicit MIME types
   // This MUST come BEFORE any other routes to prevent SPA fallback from catching JS files
-  // Use express.static with explicit MIME type handling
   app.use(express.static(frontendDistPath, {
-    setHeaders: (res, filePath, stat) => {
+    setHeaders: (res, filePath) => {
       const ext = extname(filePath).toLowerCase();
       
       // CRITICAL: JavaScript modules MUST use application/javascript
-      // This fixes the "Expected a JavaScript-or-Wasm module script" error
-      if (ext === '.js' || ext === '.mjs') {
-        // Force the correct MIME type - this is critical!
-        res.type('application/javascript');
+      // This fixes "Failed to load module script" and "Unexpected token '<'" errors
+      if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
         res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         logger.info(`✅ Serving JS file: ${filePath} with Content-Type: application/javascript`);
-      } else if (ext === '.css') {
-        res.type('text/css');
+      } else if (filePath.endsWith('.wasm')) {
+        res.setHeader('Content-Type', 'application/wasm');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (filePath.endsWith('.css')) {
         res.setHeader('Content-Type', 'text/css; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      } else if (ext === '.json') {
-        res.type('application/json');
+      } else if (filePath.endsWith('.json')) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      } else if (ext === '.html') {
-        res.type('text/html');
+      } else if (filePath.endsWith('.html')) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      } else if (ext === '.wasm') {
-        res.type('application/wasm');
-        res.setHeader('Content-Type', 'application/wasm');
       }
     },
     index: false, // CRITICAL: Don't serve index.html for directory requests
     fallthrough: true, // CRITICAL: Allow fallthrough so blocker middleware can catch missing files
-    dotfiles: 'ignore', // Ignore dotfiles
-    // CRITICAL: Don't redirect - if file doesn't exist, let middleware handle it
+    dotfiles: 'ignore',
     redirect: false,
   }));
   

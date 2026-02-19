@@ -211,11 +211,16 @@ const Checkout = () => {
       if (isJson) {
         try {
           result = await response.json();
-      // Debug: log the response to see what we're getting
-      console.log("Checkout response:", result);
-      console.log("Response keys:", Object.keys(result));
-      console.log("Has notifications?", !!result.notifications);
-      console.log("Notifications object:", result.notifications);
+          // Debug: log the FULL response to see what we're getting
+          console.log("=".repeat(60));
+          console.log("📦 FULL CHECKOUT RESPONSE:");
+          console.log(JSON.stringify(result, null, 2));
+          console.log("=".repeat(60));
+          console.log("Response keys:", Object.keys(result));
+          console.log("Has notifications?", !!result.notifications);
+          console.log("Notifications object:", result.notifications);
+          console.log("Response status:", response.status);
+          console.log("Response OK?", response.ok);
         } catch {
           throw new Error("Invalid response from server. Please try again.");
         }

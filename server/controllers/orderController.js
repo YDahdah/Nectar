@@ -156,8 +156,14 @@ export async function createOrder(req, res, next) {
     logger.info(`Order ${orderId} created successfully. Sending response:`, {
       orderId: responseData.orderId,
       hasOrderId: !!responseData.orderId,
-      responseKeys: Object.keys(responseData)
+      responseKeys: Object.keys(responseData),
+      notifications: responseData.notifications,
+      emailStatus: responseData.notifications?.email,
+      customerEmailStatus: responseData.notifications?.customerEmail
     });
+    
+    // Log full response for debugging
+    logger.info(`📤 Full response being sent:`, JSON.stringify(responseData, null, 2));
     
     res.status(201).json(responseData);
 
