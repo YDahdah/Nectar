@@ -174,9 +174,19 @@ const Checkout = () => {
       };
 
 
-      const orderEndpoint = CLOUD_FUNCTION_URL
-        ? CLOUD_FUNCTION_URL
-        : `${API_BASE}/orders/checkout`;
+      // IMPORTANT: Use local server endpoint for full email functionality
+      // Cloud Function doesn't send customer emails or return notifications
+      const orderEndpoint = `${API_BASE}/orders/checkout`;
+      
+      // Log which endpoint is being used
+      console.log('📡 Checkout endpoint:', orderEndpoint);
+      console.log('   API_BASE:', API_BASE);
+      console.log('   Using local server for full email support');
+      
+      // Warn if Cloud Function URL is set (it will be ignored)
+      if (CLOUD_FUNCTION_URL) {
+        console.warn('⚠️ CLOUD_FUNCTION_URL is set but will be ignored. Using local server instead.');
+      }
 
       let response: Response;
       try {
@@ -201,8 +211,11 @@ const Checkout = () => {
       if (isJson) {
         try {
           result = await response.json();
-          // Debug: log the response to see what we're getting
-          console.log("Checkout response:", result);
+      // Debug: log the response to see what we're getting
+      console.log("Checkout response:", result);
+      console.log("Response keys:", Object.keys(result));
+      console.log("Has notifications?", !!result.notifications);
+      console.log("Notifications object:", result.notifications);
         } catch {
           throw new Error("Invalid response from server. Please try again.");
         }
