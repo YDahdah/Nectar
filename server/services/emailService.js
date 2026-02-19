@@ -37,24 +37,32 @@ function initializeTransporter() {
     return null;
   }
 
+  // Remove any spaces from password (Gmail app passwords sometimes have spaces when copied)
+  const cleanPassword = emailPassword.replace(/\s+/g, '');
+  
   transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: emailUser,
-      pass: emailPassword
+      pass: cleanPassword
     }
   });
 
   // Verify transporter connection (async; don't block)
-  transporter.verify(function (error) {
+  transporter.verify(function (error, success) {
     if (error) {
       if (error.code === 'EAUTH') {
-        logger.warn('⚠️ Gmail login failed. In server/.env set EMAIL_PASSWORD to a Gmail App Password (not your normal password). Create one: https://myaccount.google.com/apppasswords');
+        logger.error('⚠️ Gmail authentication failed!');
+        logger.error('   Check your EMAIL_USER and EMAIL_PASSWORD in server/.env');
+        logger.error('   EMAIL_PASSWORD must be a Gmail App Password (not your regular password)');
+        logger.error('   Create one at: https://myaccount.google.com/apppasswords');
+        logger.error('   Error details:', error.message);
       } else {
         logger.error('❌ Email transporter verification failed:', error.message);
       }
     } else {
       logger.info('✅ Email transporter verified successfully');
+      logger.info(`   Ready to send emails from: ${emailUser}`);
     }
   });
 
@@ -769,35 +777,52 @@ export async function sendOrderEmail(orderData, orderId = null) {
   }
 
   // Get client's email and name from order data
-  const clientEmail = orderData.email;
+  const clientEmail = orderData.email || 'No email provided';
   const clientName = `${orderData.firstName} ${orderData.lastName}`;
   
   // Your email: orders are sent here on every checkout
   const recipientEmail = config.email.orderEmail || config.email.user;
   const emailUser = config.email.user;
 
-  // Use client's email address as the sender
-  // Note: Gmail UI will show "me" for your own emails, but the client's email
-  // will be visible in the subject line and email headers
+  // CRITICAL: Gmail requires sending FROM the authenticated email address
+  // Use your authenticated email as sender, but include client info in subject/headers
   const mailOptions = {
-    from: `${clientEmail}`,
-    replyTo: clientEmail,
+    from: `"${config.email.shopName || 'Nectar Shop'}" <${emailUser}>`,
+    replyTo: clientEmail || emailUser,
     to: recipientEmail,
-    subject: `🛍️ Order from: ${clientEmail} - ${orderId || 'Order'}`,
+    subject: `🛍️ New Order from ${clientName} (${clientEmail}) - ${orderId || 'Order'}`,
     text: formatOrderEmailText(orderData, orderId),
     html: formatOrderEmailHTML(orderData, orderId),
     headers: {
       'X-Client-Email': clientEmail,
-      'X-Client-Name': clientName
+      'X-Client-Name': clientName,
+      'X-Order-ID': orderId || 'N/A'
     }
   };
 
   try {
+    logger.info(`📧 Attempting to send order email:`);
+    logger.info(`   From: ${emailUser}`);
+    logger.info(`   To: ${recipientEmail}`);
+    logger.info(`   Subject: ${mailOptions.subject}`);
+    logger.info(`   Order ID: ${orderId}`);
+    
     const info = await emailTransporter.sendMail(mailOptions);
     
     logger.info(`✅ Email sent successfully to ${recipientEmail}`);
-    logger.info(`   From display: ${clientEmail}`);
     logger.info(`   Message ID: ${info.messageId}`);
+    logger.info(`   Response: ${info.response || 'N/A'}`);
+
+    // Check if email was actually accepted
+    if (info.rejected && info.rejected.length > 0) {
+      logger.error(`⚠️ Email was rejected by server: ${info.rejected.join(', ')}`);
+      return {
+        success: false,
+        error: `Email rejected: ${info.rejected.join(', ')}`,
+        method: 'email',
+        recipient: recipientEmail
+      };
+    }
 
     return {
       success: true,
@@ -806,36 +831,33 @@ export async function sendOrderEmail(orderData, orderId = null) {
       recipient: recipientEmail
     };
   } catch (error) {
+    logger.error('❌ Email sending error:', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode
+    });
+    
     if (error.code === 'EAUTH') {
-      logger.warn('⚠️ Gmail login failed. Set EMAIL_PASSWORD in server/.env to a Gmail App Password: https://myaccount.google.com/apppasswords');
-    } else {
-      logger.error('❌ Email sending error:', error.message);
+      logger.error('⚠️ Gmail authentication failed. Check:');
+      logger.error('   1. EMAIL_USER in server/.env is correct');
+      logger.error('   2. EMAIL_PASSWORD is a Gmail App Password (not your regular password)');
+      logger.error('   3. 2-Step Verification is enabled on your Google account');
+      logger.error('   Create App Password: https://myaccount.google.com/apppasswords');
+    } else if (error.code === 'EENVELOPE') {
+      logger.error(`⚠️ Invalid email address: ${error.message}`);
+    } else if (error.code === 'ECONNECTION') {
+      logger.error('⚠️ Connection to Gmail SMTP failed. Check your internet connection.');
     }
-    // Even if there's an error, try with authenticated email but client email in display
-    try {
-      const fallbackOptions = {
-        from: `${clientEmail}`,
-        replyTo: clientEmail,
-        to: recipientEmail,
-        subject: `🛍️ New Order from ${clientEmail} - ${orderId || 'Order'}`,
-        text: formatOrderEmailText(orderData, orderId),
-        html: formatOrderEmailHTML(orderData, orderId)
-      };
-      const info = await emailTransporter.sendMail(fallbackOptions);
-      logger.info(`✅ Email sent successfully (fallback) to ${recipientEmail}`);
-      return {
-        success: true,
-        messageId: info.messageId,
-        method: 'email',
-        recipient: recipientEmail
-      };
-    } catch (fallbackError) {
-      return {
-        success: false,
-        error: error.message,
-        method: 'email'
-      };
-    }
+    
+    return {
+      success: false,
+      error: error.message,
+      errorCode: error.code,
+      method: 'email',
+      recipient: recipientEmail
+    };
   }
 }
 

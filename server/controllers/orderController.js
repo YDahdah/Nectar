@@ -124,7 +124,7 @@ export async function createOrder(req, res, next) {
     }
 
     // Return success response
-    res.status(201).json({
+    const responseData = {
       success: true,
       message: 'Order placed successfully. You will receive a confirmation on WhatsApp and email shortly.',
       orderId,
@@ -134,7 +134,16 @@ export async function createOrder(req, res, next) {
         email: notifications.emailNotification.success,
         customerEmail: notifications.customerEmailNotification.success
       }
+    };
+    
+    // Log the response to verify orderId is included
+    logger.info(`Order ${orderId} created successfully. Sending response:`, {
+      orderId: responseData.orderId,
+      hasOrderId: !!responseData.orderId,
+      responseKeys: Object.keys(responseData)
     });
+    
+    res.status(201).json(responseData);
 
   } catch (error) {
     // Enhanced error logging
@@ -232,12 +241,21 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
     results.emailNotification = await sendOrderEmail(orderData, orderId);
 
     if (results.emailNotification.success) {
-      logger.info(`Email notification sent to ${results.emailNotification.recipient}`);
+      logger.info(`✅ Email notification sent successfully to ${results.emailNotification.recipient}`);
+      logger.info(`   Message ID: ${results.emailNotification.messageId || 'N/A'}`);
     } else {
-      logger.warn('Email notification failed (non-critical)');
+      logger.error('❌ Email notification failed:', {
+        error: results.emailNotification.error,
+        errorCode: results.emailNotification.errorCode,
+        recipient: results.emailNotification.recipient
+      });
     }
   } catch (error) {
-    logger.error('Error sending email notification:', error);
+    logger.error('❌ Error sending email notification:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
   }
 
   try {

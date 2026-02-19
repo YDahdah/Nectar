@@ -201,6 +201,8 @@ const Checkout = () => {
       if (isJson) {
         try {
           result = await response.json();
+          // Debug: log the response to see what we're getting
+          console.log("Checkout response:", result);
         } catch {
           throw new Error("Invalid response from server. Please try again.");
         }
@@ -220,23 +222,32 @@ const Checkout = () => {
         throw new Error(msg);
       }
 
-      // Handle Cloud Function response format
-      if (!result.orderId && result.success) {
-        // Cloud Function returns success but might not have orderId in response
-        // Generate a temporary one for display
-        result.orderId = `ORD-${Date.now()}`;
+      // Ensure orderId exists - check multiple possible field names
+      if (!result.orderId) {
+        // Try alternative field names
+        const orderId = (result as any).order_id || (result as any).orderID || (result as any).id;
+        if (orderId) {
+          result.orderId = String(orderId);
+        } else if (result.success) {
+          // Generate a temporary one for display if missing
+          result.orderId = `ORD-${Date.now()}`;
+          console.warn("Order ID missing from response, generated temporary ID:", result.orderId);
+        }
       }
 
+      // Ensure we have an orderId before showing toast
+      const displayOrderId = result.orderId || `ORD-${Date.now()}`;
+      
       toast({
         title: "Order placed successfully!",
-        description: `Your order #${result.orderId} has been received.`,
+        description: `Your order #${displayOrderId} has been received.`,
       });
 
       clearCart();
 
       // Redirect to order confirmation page
       setTimeout(() => {
-        navigate(`/order-confirmation?orderId=${result.orderId}`);
+        navigate(`/order-confirmation?orderId=${displayOrderId}`);
       }, 1500);
     } catch (error) {
       console.error("Checkout error:", error);
