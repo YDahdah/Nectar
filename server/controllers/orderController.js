@@ -195,6 +195,11 @@ export async function createOrder(req, res, next) {
  * @returns {Promise<Object>} Results of notification attempts
  */
 async function sendNotifications(orderData, orderId, formattedPhone) {
+  logger.info(`📧 sendNotifications called for order ${orderId}`);
+  logger.info(`   Order data keys: ${Object.keys(orderData || {}).join(', ')}`);
+  logger.info(`   Has email: ${!!orderData?.email}`);
+  logger.info(`   Has items: ${!!orderData?.items && orderData.items.length > 0}`);
+  
   const results = {
     customerNotification: { success: false },
     ownerNotification: { success: false },
@@ -204,6 +209,7 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
 
   try {
     // Send order confirmation to customer via WhatsApp
+    logger.info('📱 Sending WhatsApp notification to customer...');
     results.customerNotification = await sendOrderNotification(
       formattedPhone, 
       orderData, 
@@ -211,19 +217,22 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
     );
 
     if (results.customerNotification.success) {
-      logger.info(`Customer notification sent via ${results.customerNotification.method || 'console'}`);
+      logger.info(`✅ Customer notification sent via ${results.customerNotification.method || 'console'}`);
     } else {
-      logger.error('Failed to send customer notification:', results.customerNotification.error);
+      logger.warn('⚠️ Failed to send customer notification:', results.customerNotification.error);
     }
   } catch (error) {
-    logger.error('Error sending customer notification:', error);
+    logger.error('❌ Error sending customer notification:', {
+      message: error.message,
+      stack: error.stack
+    });
   }
 
   try {
     // Send notification to owner
     const ownerPhone = config.ownerPhone;
     if (ownerPhone && ownerPhone !== formattedPhone) {
-      logger.info(`Sending order notification to owner: ${ownerPhone}`);
+      logger.info(`📱 Sending WhatsApp notification to owner: ${ownerPhone}`);
       const ownerOrderData = {
         ...orderData,
         isOwnerNotification: true
@@ -235,19 +244,39 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
       );
 
       if (results.ownerNotification.success) {
-        logger.info('Owner notification sent successfully');
+        logger.info('✅ Owner notification sent successfully');
       } else {
-        logger.warn('Owner notification failed (non-critical)');
+        logger.warn('⚠️ Owner notification failed (non-critical)');
       }
+    } else {
+      logger.info('ℹ️ Skipping owner WhatsApp notification (same as customer or not configured)');
     }
   } catch (error) {
-    logger.error('Error sending owner notification:', error);
+    logger.error('❌ Error sending owner notification:', {
+      message: error.message,
+      stack: error.stack
+    });
   }
 
   try {
     // Send email notification to owner
-    logger.info('Sending email notification to owner...');
+    logger.info('📧 Sending email notification to owner...');
+    logger.info(`   Order data for email:`, {
+      hasEmail: !!orderData?.email,
+      hasFirstName: !!orderData?.firstName,
+      hasLastName: !!orderData?.lastName,
+      hasItems: !!orderData?.items,
+      itemsCount: orderData?.items?.length || 0
+    });
+    
     results.emailNotification = await sendOrderEmail(orderData, orderId);
+    
+    logger.info(`📧 Email notification result:`, {
+      success: results.emailNotification.success,
+      recipient: results.emailNotification.recipient,
+      messageId: results.emailNotification.messageId,
+      error: results.emailNotification.error
+    });
 
     if (results.emailNotification.success) {
       logger.info(`✅ Email notification sent successfully to ${results.emailNotification.recipient}`);
@@ -260,11 +289,17 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
       });
     }
   } catch (error) {
-    logger.error('❌ Error sending email notification:', {
+    logger.error('❌ Exception while sending email notification:', {
       message: error.message,
       stack: error.stack,
-      code: error.code
+      code: error.code,
+      name: error.name
     });
+    results.emailNotification = {
+      success: false,
+      error: error.message,
+      errorCode: error.code
+    };
   }
 
   try {

@@ -766,8 +766,22 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
  */
 export async function sendOrderEmail(orderData, orderId = null) {
   logger.info('📧 sendOrderEmail called');
-  logger.info(`   Order ID: ${orderId}`);
-  logger.info(`   Order data keys: ${Object.keys(orderData || {}).join(', ')}`);
+  logger.info(`   Order ID: ${orderId || 'N/A'}`);
+  logger.info(`   Order data type: ${typeof orderData}`);
+  logger.info(`   Order data keys: ${orderData ? Object.keys(orderData).join(', ') : 'null/undefined'}`);
+  logger.info(`   Has firstName: ${!!orderData?.firstName}`);
+  logger.info(`   Has lastName: ${!!orderData?.lastName}`);
+  logger.info(`   Has email: ${!!orderData?.email}`);
+  logger.info(`   Has items: ${!!orderData?.items}`);
+  
+  if (!orderData) {
+    logger.error('❌ orderData is null or undefined');
+    return {
+      success: false,
+      error: 'Order data is missing',
+      method: 'email'
+    };
+  }
   
   const emailTransporter = initializeTransporter();
   
