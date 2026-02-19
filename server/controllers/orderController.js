@@ -107,6 +107,12 @@ export async function createOrder(req, res, next) {
 
     logger.info(`Processing order ${orderId}...`);
     logger.info(`Order total: $${calculatedTotal}, Items: ${orderData.items.length}`);
+    logger.info(`📧 Order email check:`, {
+      hasEmail: !!orderObject.email,
+      email: orderObject.email || 'NOT PROVIDED',
+      emailLength: orderObject.email?.length || 0,
+      emailTrimmed: orderObject.email?.trim() || 'EMPTY'
+    });
 
     // Send notifications (non-blocking) - wrap in try-catch to prevent errors from breaking the response
     let notifications = {

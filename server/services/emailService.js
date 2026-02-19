@@ -690,6 +690,18 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
     };
   }
 
+  // Reject placeholder/test domains that don't accept email
+  const invalidDomains = ['example.com', 'test.com', 'example.org', 'test.org', 'example.net'];
+  const emailDomain = customerEmail.split('@')[1];
+  if (invalidDomains.includes(emailDomain)) {
+    logger.error(`❌ Invalid email domain (placeholder/test domain): ${customerEmail}`);
+    return {
+      success: false,
+      error: `Please use a real email address. ${emailDomain} is a test domain that doesn't accept email.`,
+      method: 'email'
+    };
+  }
+
   logger.info(`📧 Preparing to send confirmation email to customer: ${customerEmail}`);
 
   const emailUser = config.email.user;
