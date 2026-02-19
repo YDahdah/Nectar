@@ -12,6 +12,20 @@ export const CLOUD_FUNCTION_URL =
     ? import.meta.env.VITE_CLOUD_FUNCTION_URL.replace(/\/$/, "")
     : null; // Will fallback to API_BASE if not set
 
+export function buildApiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const isAbsoluteBase = /^https?:\/\//i.test(API_BASE);
+
+  // For absolute hosts, enforce /api prefix once to match backend mounts.
+  if (isAbsoluteBase) {
+    const baseWithApi = API_BASE.endsWith("/api") ? API_BASE : `${API_BASE}/api`;
+    return `${baseWithApi}${normalizedPath}`;
+  }
+
+  // Relative bases (e.g. /api in local dev) already include proxy prefix.
+  return `${API_BASE}${normalizedPath}`;
+}
+
 
 export function getImageUrl(src: string): string {
   if (typeof src !== "string" || !src) return src;

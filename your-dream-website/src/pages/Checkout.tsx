@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE, CLOUD_FUNCTION_URL, getImageUrl } from "@/lib/config";
+import { API_BASE, CLOUD_FUNCTION_URL, buildApiUrl, getImageUrl } from "@/lib/config";
 import { validateDeliveryFields } from "@/lib/checkoutValidation";
 
 const CHECKOUT_SAVED_KEY = "nectar_checkout_saved";
@@ -174,13 +174,7 @@ const Checkout = () => {
       };
 
 
-      // Use production API endpoint (Ubuntu server)
-      // Backend routes are mounted under /api
-      // If API_BASE already includes /api (like /api for local dev), use it directly
-      // If API_BASE is full URL (like https://api.perfumenectar.com), add /api
-      const orderEndpoint = API_BASE.startsWith('http') 
-        ? `${API_BASE}/api/orders/checkout`  // Production: add /api prefix
-        : `${API_BASE}/orders/checkout`;      // Local dev: API_BASE is already /api
+      const orderEndpoint = buildApiUrl("/orders/checkout");
       
       // Log which endpoint is being used
       console.log('📡 Checkout endpoint:', orderEndpoint);
