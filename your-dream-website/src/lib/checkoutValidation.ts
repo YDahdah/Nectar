@@ -41,16 +41,17 @@ export function validateDeliveryFields(
       errors.phone = "Please enter a valid phone number";
     }
   }
-  if (!data.email.trim()) {
-    errors.email = "Email is required for order confirmation";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-    errors.email = "Please enter a valid email address";
-  } else {
-    // Warn about placeholder/test domains
-    const emailDomain = data.email.trim().toLowerCase().split('@')[1];
-    const invalidDomains = ['example.com', 'test.com', 'example.org', 'test.org', 'example.net'];
-    if (invalidDomains.includes(emailDomain)) {
-      errors.email = "Please use a real email address. Test domains don't receive email.";
+  // Email is optional, but if provided, validate format
+  if (data.email.trim()) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      errors.email = "Please enter a valid email address";
+    } else {
+      // Warn about placeholder/test domains
+      const emailDomain = data.email.trim().toLowerCase().split('@')[1];
+      const invalidDomains = ['example.com', 'test.com', 'example.org', 'test.org', 'example.net'];
+      if (invalidDomains.includes(emailDomain)) {
+        errors.email = "Please use a real email address. Test domains don't receive email.";
+      }
     }
   }
 

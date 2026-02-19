@@ -61,7 +61,9 @@ class ErrorBoundary extends Component<Props, State> {
   };
 
   handleReload = () => {
-    window.location.reload();
+    const url = new URL(window.location.href);
+    url.searchParams.set("_refresh", String(Date.now()));
+    window.location.replace(url.toString());
   };
 
   render() {
