@@ -765,16 +765,23 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
  * Sends order notification email
  */
 export async function sendOrderEmail(orderData, orderId = null) {
+  logger.info('📧 sendOrderEmail called');
+  logger.info(`   Order ID: ${orderId}`);
+  logger.info(`   Order data keys: ${Object.keys(orderData || {}).join(', ')}`);
+  
   const emailTransporter = initializeTransporter();
   
   if (!emailTransporter) {
-    logger.warn('⚠️ Email transporter not initialized. Email will not be sent.');
+    logger.error('❌ Email transporter not initialized. Email will not be sent.');
+    logger.error('   Check server logs for email configuration errors');
     return {
       success: false,
       error: 'Email transporter not configured',
       method: 'email'
     };
   }
+  
+  logger.info('✅ Email transporter is initialized');
 
   // Get client's email and name from order data
   const clientEmail = orderData.email || 'No email provided';

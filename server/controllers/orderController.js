@@ -117,10 +117,19 @@ export async function createOrder(req, res, next) {
     };
 
     try {
+      logger.info(`📧 Starting notification process for order ${orderId}...`);
       notifications = await sendNotifications(orderObject, orderId, formattedPhone);
+      logger.info(`📧 Notification results:`, {
+        email: notifications.emailNotification.success,
+        customerEmail: notifications.customerEmailNotification.success,
+        whatsapp: notifications.customerNotification.success
+      });
     } catch (notificationError) {
       // Log but don't fail the order if notifications fail
-      logger.error('Notification error (non-critical):', notificationError);
+      logger.error('❌ Notification error (non-critical):', {
+        message: notificationError.message,
+        stack: notificationError.stack
+      });
     }
 
     // Return success response
