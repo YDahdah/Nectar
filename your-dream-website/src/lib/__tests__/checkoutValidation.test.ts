@@ -8,7 +8,7 @@ const validData: CheckoutFormData = {
   city: "Beirut",
   caza: "Beirut",
   phone: "03123456",
-  email: "john@example.com",
+  email: "john@testdomain.com",
 };
 
 describe("validateDeliveryFields", () => {
@@ -66,13 +66,17 @@ describe("validateDeliveryFields", () => {
     expect(validateDeliveryFields({ ...validData, phone: "76123456" })).toEqual({});
   });
 
-  it("requires email and validates format", () => {
-    expect(validateDeliveryFields({ ...validData, email: "" })).toMatchObject({
-      email: "Email is required",
-    });
+  it("email is optional but validates format when provided", () => {
+    // Empty email should be allowed
+    expect(validateDeliveryFields({ ...validData, email: "" })).toEqual({});
+    expect(validateDeliveryFields({ ...validData, email: "   " })).toEqual({});
+    
+    // Invalid format should show error
     expect(validateDeliveryFields({ ...validData, email: "invalid" })).toMatchObject({
       email: "Please enter a valid email address",
     });
+    
+    // Valid email should pass
     expect(validateDeliveryFields({ ...validData, email: "a@b.c" })).toEqual({});
   });
 
@@ -86,8 +90,9 @@ describe("validateDeliveryFields", () => {
       phone: "",
       email: "",
     });
-    expect(Object.keys(result).length).toBe(7);
+    // Email is optional, so empty email should not produce an error
+    expect(Object.keys(result).length).toBe(6);
     expect(result.firstName).toBeDefined();
-    expect(result.email).toBeDefined();
+    expect(result.email).toBeUndefined();
   });
 });

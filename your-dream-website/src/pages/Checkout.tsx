@@ -649,19 +649,18 @@ const Checkout = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm text-card-foreground">
-                    Email
+                    Email <span className="text-muted-foreground font-normal">(optional)</span>
                   </Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="your.email@example.com"
+                    placeholder="your.email@example.com (optional)"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
                     className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.email ? "border-red-500" : ""
                       }`}
                     aria-describedby={formErrors.email ? "email-error" : undefined}
                     aria-invalid={!!formErrors.email}
-                    required
                   />
                   {formErrors.email && (
                     <p id="email-error" className="text-sm text-red-500" role="alert">
@@ -703,7 +702,7 @@ const Checkout = () => {
               <div className="space-y-4">
                 <h2 className="text-base font-normal text-card-foreground">Review your order</h2>
                 <div className="bg-muted/30 rounded-md p-4 space-y-2 text-xs sm:text-sm break-words">
-                  <p><span className="text-muted-foreground">Delivery:</span> {formData.firstName} {formData.lastName}, {formData.address}, {formData.city}, {formData.caza}. {formData.phone} · {formData.email}</p>
+                  <p><span className="text-muted-foreground">Delivery:</span> {formData.firstName} {formData.lastName}, {formData.address}, {formData.city}, {formData.caza}. {formData.phone}{formData.email ? ` · ${formData.email}` : ''}</p>
                   <p><span className="text-muted-foreground">Shipping:</span> Delivery (2-3 Working Days) — ${shippingCost.toFixed(2)}</p>
                   <p><span className="text-muted-foreground">Payment:</span> Cash on Delivery (COD)</p>
                 </div>
