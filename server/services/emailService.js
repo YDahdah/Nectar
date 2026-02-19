@@ -13,7 +13,31 @@ function isPlaceholderEmail(user) {
   return u === '' || u === PLACEHOLDER_EMAIL || u.includes('your-email') || u.includes('example.com');
 }
 
+/**
+ * Reset the email transporter cache
+ * Call this if email credentials change and you need to reload them
+ */
+export function resetTransporter() {
+  if (transporter) {
+    transporter.close();
+    transporter = null;
+    logger.info('🔄 Email transporter cache reset');
+  }
+}
+
 function initializeTransporter() {
+  // Check if credentials have changed and reset if needed
+  const currentEmailUser = config.email.user;
+  const currentEmailPassword = config.email.password;
+  
+  // If transporter exists but credentials changed, reset it
+  if (transporter && (transporter.options?.auth?.user !== currentEmailUser || 
+                      transporter.options?.auth?.pass !== currentEmailPassword)) {
+    logger.info('🔄 Email credentials changed, resetting transporter...');
+    transporter.close();
+    transporter = null;
+  }
+  
   if (transporter) return transporter;
 
   const emailUser = config.email.user;

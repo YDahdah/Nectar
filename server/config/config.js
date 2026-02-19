@@ -1,7 +1,14 @@
 import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import logger from "../utils/logger.js";
 
-dotenv.config();
+// Get the directory of the current module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env file from the server directory
+dotenv.config({ path: join(__dirname, "..", ".env") });
 
 /**
  * Validate required environment variables
