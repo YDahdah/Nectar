@@ -291,9 +291,11 @@ if (existsSync(frontendDistPath)) {
         res.setHeader('Content-Type', 'application/wasm');
       }
     },
-    index: false, // Don't serve index.html for directory requests
-    fallthrough: true, // Allow fallthrough so blocker middleware can catch missing files
+    index: false, // CRITICAL: Don't serve index.html for directory requests
+    fallthrough: true, // CRITICAL: Allow fallthrough so blocker middleware can catch missing files
     dotfiles: 'ignore', // Ignore dotfiles
+    // CRITICAL: Don't redirect - if file doesn't exist, let middleware handle it
+    redirect: false,
   }));
   
   logger.info(`✅ Static files serving enabled from: ${frontendDistPath}`);
@@ -463,26 +465,47 @@ app.use((req, res, next) => {
 });
 
 // CRITICAL: Block static asset requests from reaching SPA fallback
-// This middleware MUST run before SPA fallback to prevent index.html from being served for JS files
+// This middleware MUST run AFTER express.static but BEFORE SPA fallback
+// It catches any static asset requests that express.static didn't handle
 app.use((req, res, next) => {
   // Check if this is a static asset request
   const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
   
   if (isStaticAsset) {
-    // If we reach here, express.static didn't find the file
-    // CRITICAL: Return 404, NEVER serve index.html for static assets
-    logger.error(`❌ CRITICAL: Static file not found: ${req.path}`);
-    logger.error(`   This means express.static didn't find the file at: ${join(frontendDistPath, req.path)}`);
-    logger.error(`   Frontend dist path: ${frontendDistPath}`);
+    // Double-check if file exists (express.static should have caught it if it exists)
+    const filePath = join(frontendDistPath, req.path);
     
-    // Return 404 with proper content type
+    if (existsSync(filePath)) {
+      // File exists but express.static didn't serve it - this shouldn't happen
+      // But let's serve it directly to be safe
+      logger.warn(`⚠️ File exists but express.static didn't serve it: ${req.path}`);
+      const ext = extname(filePath).toLowerCase();
+      if (ext === '.js' || ext === '.mjs') {
+        res.type('application/javascript');
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      }
+      return res.sendFile(resolve(filePath));
+    }
+    
+    // File doesn't exist - CRITICAL: Return 404 JSON, NEVER serve index.html
+    logger.error(`❌ Static file not found: ${req.path}`);
+    logger.error(`   Attempted path: ${filePath}`);
+    logger.error(`   Frontend dist path: ${frontendDistPath}`);
+    logger.error(`   Request URL: ${req.url}`);
+    logger.error(`   Request method: ${req.method}`);
+    
+    // Set headers BEFORE sending response - CRITICAL to prevent HTML
     res.status(404);
-    res.type('application/json');
-    return res.json({ 
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    
+    // Send JSON response - this prevents any HTML from being sent
+    return res.end(JSON.stringify({ 
       error: 'File not found',
       path: req.path,
       message: 'Static file not found. This should never return HTML.'
-    });
+    }));
   }
   
   next();
@@ -518,7 +541,21 @@ app.use((req, res, next) => {
   }
   
   // Skip if path looks like a file (extra safety)
+  // This is critical - if path has an extension, it's a file request, not a route
   if (req.path.includes('.')) {
+    const ext = req.path.split('.').pop()?.toLowerCase();
+    // If it's a known file extension, this should have been caught by static middleware
+    if (['js', 'mjs', 'css', 'json', 'woff2', 'woff', 'ttf', 'eot', 'otf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico', 'wasm', 'map'].includes(ext || '')) {
+      logger.error(`❌ CRITICAL: SPA fallback caught file request: ${req.path}`);
+      logger.error(`   This should be IMPOSSIBLE - static middleware should have caught this!`);
+      res.status(404);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.json({ 
+        error: 'File not found',
+        path: req.path,
+        message: 'File request reached SPA fallback - this should never happen'
+      });
+    }
     logger.warn(`⚠️  SPA fallback: Path contains dot but wasn't caught by static asset check: ${req.path}`);
     return next(); // Let 404 handler catch it
   }
@@ -526,12 +563,14 @@ app.use((req, res, next) => {
   // Only serve index.html for actual routes (not files)
   if (existsSync(frontendDistPath)) {
     const indexPath = join(frontendDistPath, 'index.html');
-    res.sendFile(indexPath, {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
-    }, (err) => {
+    
+    // CRITICAL: Set cache headers BEFORE sending file
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
+    res.sendFile(indexPath, (err) => {
       if (err) {
         logger.error('Error serving index.html:', err);
         next();

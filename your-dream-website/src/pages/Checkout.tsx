@@ -240,13 +240,30 @@ const Checkout = () => {
       
       // Check if email was sent successfully
       const notifications = (result as any).notifications;
-      const emailSent = notifications?.customerEmail;
+      const ownerEmailSent = notifications?.email;
+      const customerEmailSent = notifications?.customerEmail;
+      const emailError = notifications?.customerEmailError;
+      
+      // Log notification status for debugging
+      console.log('📧 Email notification status:', {
+        ownerEmail: ownerEmailSent,
+        customerEmail: customerEmailSent,
+        error: emailError
+      });
+      
+      // Show appropriate message based on email status
+      let description = `Your order #${displayOrderId} has been received.`;
+      if (customerEmailSent) {
+        description += ' Check your email for confirmation.';
+      } else if (emailError) {
+        description += ` Email confirmation could not be sent: ${emailError}`;
+      } else {
+        description += ' You will receive a confirmation email shortly.';
+      }
       
       toast({
         title: "Order placed successfully!",
-        description: emailSent 
-          ? `Your order #${displayOrderId} has been received. Check your email for confirmation.`
-          : `Your order #${displayOrderId} has been received. ${notifications?.customerEmailError ? 'Email confirmation could not be sent - please check your email address.' : 'You will receive a confirmation email shortly.'}`,
+        description: description,
       });
 
       clearCart();
