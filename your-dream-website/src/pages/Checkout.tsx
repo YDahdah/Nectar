@@ -238,9 +238,15 @@ const Checkout = () => {
       // Ensure we have an orderId before showing toast
       const displayOrderId = result.orderId || `ORD-${Date.now()}`;
       
+      // Check if email was sent successfully
+      const notifications = (result as any).notifications;
+      const emailSent = notifications?.customerEmail;
+      
       toast({
         title: "Order placed successfully!",
-        description: `Your order #${displayOrderId} has been received.`,
+        description: emailSent 
+          ? `Your order #${displayOrderId} has been received. Check your email for confirmation.`
+          : `Your order #${displayOrderId} has been received. ${notifications?.customerEmailError ? 'Email confirmation could not be sent - please check your email address.' : 'You will receive a confirmation email shortly.'}`,
       });
 
       clearCart();
@@ -614,18 +620,19 @@ const Checkout = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm text-card-foreground">
-                    Email <span className="text-muted-foreground font-normal">(optional)</span>
+                    Email
                   </Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="Email (optional)"
+                    placeholder="your.email@example.com"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
                     className={`w-full h-12 rounded-md border-gray-300 bg-white ${formErrors.email ? "border-red-500" : ""
                       }`}
                     aria-describedby={formErrors.email ? "email-error" : undefined}
                     aria-invalid={!!formErrors.email}
+                    required
                   />
                   {formErrors.email && (
                     <p id="email-error" className="text-sm text-red-500" role="alert">

@@ -141,7 +141,8 @@ export async function createOrder(req, res, next) {
         whatsapp: notifications.customerNotification.success,
         whatsappMethod: notifications.customerNotification.method || 'console',
         email: notifications.emailNotification.success,
-        customerEmail: notifications.customerEmailNotification.success
+        customerEmail: notifications.customerEmailNotification.success,
+        customerEmailError: notifications.customerEmailNotification.error || null
       }
     };
     
@@ -304,19 +305,46 @@ async function sendNotifications(orderData, orderId, formattedPhone) {
 
   try {
     // Send confirmation email to customer
-    logger.info('Sending confirmation email to customer...');
-    results.customerEmailNotification = await sendCustomerConfirmationEmail(
-      orderData, 
-      orderId
-    );
-
-    if (results.customerEmailNotification.success) {
-      logger.info(`Customer confirmation email sent to ${results.customerEmailNotification.recipient}`);
+    logger.info('📧 Sending confirmation email to customer...');
+    logger.info(`   Customer email: ${orderData?.email || 'NOT PROVIDED'}`);
+    logger.info(`   Order ID: ${orderId}`);
+    
+    if (!orderData?.email || !orderData.email.trim()) {
+      logger.warn('⚠️ Customer email not provided. Skipping customer confirmation email.');
+      results.customerEmailNotification = {
+        success: false,
+        error: 'Customer email not provided',
+        method: 'email'
+      };
     } else {
-      logger.warn('Customer confirmation email failed (non-critical)');
+      results.customerEmailNotification = await sendCustomerConfirmationEmail(
+        orderData, 
+        orderId
+      );
+
+      if (results.customerEmailNotification.success) {
+        logger.info(`✅ Customer confirmation email sent successfully to ${results.customerEmailNotification.recipient}`);
+        logger.info(`   Message ID: ${results.customerEmailNotification.messageId || 'N/A'}`);
+      } else {
+        logger.error('❌ Customer confirmation email failed:', {
+          error: results.customerEmailNotification.error,
+          errorCode: results.customerEmailNotification.errorCode,
+          recipient: results.customerEmailNotification.recipient
+        });
+      }
     }
   } catch (error) {
-    logger.error('Error sending customer confirmation email:', error);
+    logger.error('❌ Exception while sending customer confirmation email:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      name: error.name
+    });
+    results.customerEmailNotification = {
+      success: false,
+      error: error.message,
+      errorCode: error.code
+    };
   }
 
   return results;
