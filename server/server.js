@@ -38,7 +38,9 @@ const corsOrigins = config.security.corsOrigins || [
   "https://perfumenectar.com",
   "https://www.perfumenectar.com",
   "http://localhost:5173",
+  "http://localhost:8080",
   "http://localhost:3000",
+  "http://127.0.0.1:8080",
 ];
 
 // CORS origin validation function
@@ -80,7 +82,7 @@ const corsOriginValidatorCallback = (origin, callback) => {
 const corsConfig = {
   origin: corsOriginValidatorCallback,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
+  allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key", "X-Requested-With", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"],
   credentials: true,
   optionsSuccessStatus: 204,
   maxAge: 86400,
@@ -376,6 +378,7 @@ app.get("/api", (req, res) => {
     endpoints: {
       health: "/health",
       apiHealth: "/api/health",
+      emailHealth: "/api/health/email",
       orders: "/api/orders",
       products: "/api/products",
       newsletter: "/api/newsletter",
@@ -397,6 +400,76 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
   });
+});
+
+// Diagnostic route: visit /api/health/email in a browser to verify the
+// email pipeline end-to-end against the live env vars. Returns the real
+// error message so production logs aren't required to identify failures.
+// Safe to leave enabled (it sends one dummy email to OWNER_EMAIL/ORDER_EMAIL).
+app.get("/api/health/email", async (req, res) => {
+  const envSummary = {
+    EMAIL_USER: process.env.EMAIL_USER ? "SET ✓" : "MISSING ✗",
+    EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? "SET ✓" : "MISSING ✗",
+    OWNER_EMAIL: process.env.OWNER_EMAIL ? "SET ✓" : "MISSING ✗",
+    ORDER_EMAIL: process.env.ORDER_EMAIL ? "SET ✓" : "MISSING ✗",
+    NODE_ENV: process.env.NODE_ENV || "unset",
+  };
+
+  try {
+    const { sendOwnerOrderNotification: sendOwner } = await import(
+      "./services/emailService.js"
+    );
+    const result = await sendOwner({
+      firstName: "Test",
+      lastName: "User",
+      orderId: "TEST-001",
+      email: "health-check@example.com",
+      phone: "70000000",
+      address: "Test St",
+      city: "Beirut",
+      caza: "Beirut",
+      country: "Lebanon",
+      items: [
+        {
+          name: "Test Perfume",
+          size: "100ml",
+          quantity: 1,
+          price: 50,
+        },
+      ],
+      shippingCost: 0,
+      subtotal: 50,
+      totalPrice: 50,
+    });
+
+    if (!result.success) {
+      // eslint-disable-next-line no-console
+      console.error("[health/email] Send failed:", result);
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+        errorCode: result.errorCode,
+        env: envSummary,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Owner email sent successfully",
+      recipient: result.recipient,
+      messageId: result.messageId,
+      env: envSummary,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[health/email] Threw:", err.message, err.stack);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: err.stack,
+      env: envSummary,
+    });
+  }
 });
 
 // Performance monitoring middleware (after security, before routes)

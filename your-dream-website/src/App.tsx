@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ShopProvider } from "@/contexts/ShopContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import WebsiteStructuredData from "@/components/WebsiteStructuredData";
 import BackToTop from "@/components/BackToTop";
@@ -82,38 +83,40 @@ const App = () => {
       }}
     >
     <QueryClientProvider client={queryClient}>
-      <CartProvider>
-        <ShopProvider>
-          <TooltipProvider>
-              <WebsiteStructuredData />
-              <Toaster />
-              <Sonner />
-              <BrowserRouter
-                future={{
-                  v7_startTransition: true,
-                  v7_relativeSplatPath: true,
-                }}
-              >
-                <PrefetchRoutes />
-                <ErrorBoundary>
-                  <Suspense fallback={<PageLoader />}>
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/shop" element={<Shop />} />
-                      <Route path="/product/:id" element={<Product />} />
-                      <Route path="/cart" element={<Cart />} />
-                      <Route path="/checkout" element={<Checkout />} />
-                      <Route path="/order-confirmation" element={<OrderConfirmation />} />
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                    <BackToTop />
-                  </Suspense>
-                </ErrorBoundary>
-              </BrowserRouter>
-            </TooltipProvider>
-        </ShopProvider>
-      </CartProvider>
+      <AuthProvider>
+        <CartProvider>
+          <ShopProvider>
+            <TooltipProvider>
+                <WebsiteStructuredData />
+                <Toaster />
+                <Sonner />
+                <BrowserRouter
+                  future={{
+                    v7_startTransition: true,
+                    v7_relativeSplatPath: true,
+                  }}
+                >
+                  <PrefetchRoutes />
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <Routes>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/shop" element={<Shop />} />
+                        <Route path="/product/:id" element={<Product />} />
+                        <Route path="/cart" element={<Cart />} />
+                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/order-confirmation" element={<OrderConfirmation />} />
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                      <BackToTop />
+                    </Suspense>
+                  </ErrorBoundary>
+                </BrowserRouter>
+              </TooltipProvider>
+          </ShopProvider>
+        </CartProvider>
+      </AuthProvider>
     </QueryClientProvider>
     </ErrorBoundary>
   );

@@ -52,3 +52,11 @@ node_modules/
 
 # dotenv environment variables file
 .env
+
+# Frontend build output (Vite)
+your-dream-website/dist/
+your-dream-website/dist-ssr/
+
+# Firebase local cache
+your-dream-website/.firebase/
+.firebase/

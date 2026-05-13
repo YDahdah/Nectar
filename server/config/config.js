@@ -26,6 +26,7 @@ function validateEnv() {
     "GOOGLE_REFRESH_TOKEN",
     "OWNER_PHONE",
     "ORDER_EMAIL",
+    "OWNER_EMAIL",
     "FRONTEND_URL",
     "NODE_ENV",
   ];
@@ -83,8 +84,7 @@ const config = {
   email: {
     user: process.env.EMAIL_USER,
     password: process.env.EMAIL_PASSWORD || process.env.EMAIL_APP_PASSWORD,
-    // Force order notifications to this inbox.
-    orderEmail: "lbnectar@gmail.com",
+    orderEmail: process.env.ORDER_EMAIL || "youssefdahdah33@gmail.com",
     shopName: process.env.SHOP_NAME || "Nectar Perfume Shop",
   },
 

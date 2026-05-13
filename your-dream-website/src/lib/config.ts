@@ -1,10 +1,35 @@
-// Backend API URL – no local fallback; use VITE_API_BASE_URL or production.
-// If VITE_API_BASE_URL is relative (starts with /), it will use Vite proxy in dev
-// If absolute (starts with http), it will call production server directly
-export const API_BASE =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
-    ? (import.meta.env.VITE_API_BASE_URL as string).replace(/\/$/, "")
-    : "https://api.perfumenectar.com";
+/** Dev: `/api` (Vite proxies to the Node server). Prod: set `VITE_API_BASE_URL` or absolute `VITE_API_URL`. */
+function resolveApiBase(): string {
+  const env = typeof import.meta !== "undefined" ? import.meta.env : undefined;
+  const fromApiUrl = env?.VITE_API_URL?.trim();
+  const fromBaseUrl = env?.VITE_API_BASE_URL?.trim();
+  const raw = fromApiUrl || fromBaseUrl || "/api";
+  const base = raw.replace(/\/$/, "");
+
+  // Production safety net: if the build accidentally bakes in localhost,
+  // calls would silently fail on the live domain. Fall back to same-origin
+  // `/api` (which Firebase Hosting rewrites to the Cloud Function).
+  if (typeof window !== "undefined") {
+    const isLocalhostHost =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1";
+    const baseLooksLocal = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(base);
+    if (baseLooksLocal && !isLocalhostHost) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[config] VITE_API_URL points at localhost but the page is on " +
+          window.location.hostname +
+          ". Falling back to /api so requests reach the live backend.",
+      );
+      return "/api";
+    }
+  }
+
+  return base;
+}
+
+// Backend API base (relative in dev → Vite `server.proxy` → http://localhost:3000).
+export const API_BASE = resolveApiBase();
 
 // Cloud Function URL for order processing
 export const CLOUD_FUNCTION_URL =

@@ -6,6 +6,15 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
+// Boot log so Cloud Functions logs immediately reveal whether SendGrid
+// secrets were actually attached at deploy time. Secrets resolve lazily,
+// so this only checks the names — actual values are read at request time.
+logger.info("[functions] Email config (deploy-time):", {
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? "SET" : "MISSING",
+  FROM_EMAIL: process.env.FROM_EMAIL || "MISSING",
+  STORE_EMAIL: process.env.STORE_EMAIL || "MISSING",
+});
+
 /**
  * Prevent simple HTML injection in emails
  */
@@ -48,6 +57,11 @@ exports.createOrder = onRequest(
     (req, res) => {
       cors(req, res, async () => {
         try {
+          // Handle preflight (firebase hosting/function rewrite may trigger OPTIONS)
+          if (req.method === "OPTIONS") {
+            return res.status(204).send("");
+          }
+
           // 1) Allow only POST
           if (req.method !== "POST") {
             return res.status(405).json({error: "Method not allowed"});
@@ -218,7 +232,12 @@ exports.createOrder = onRequest(
           `;
 
           // 5) Send email via SendGrid
+          let emailSent = false;
+          let emailErrorMessage = null;
           try {
+            if (!process.env.SENDGRID_API_KEY) {
+              throw new Error("SENDGRID_API_KEY secret is not set on this function");
+            }
             sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
             const fromEmail = process.env.FROM_EMAIL || "no-reply@nectarperfume.com";
@@ -233,11 +252,20 @@ exports.createOrder = onRequest(
               replyTo: email, // So you can reply directly to customer
             });
 
+            emailSent = true;
             logger.info(`Order email sent for ${orderId}`, {email, totalPrice: orderObject.totalPrice});
           } catch (emailError) {
-            logger.error("Failed to send order email", emailError);
-            // Still return success if email fails - order is saved
-            // You might want to handle this differently in production
+            // SendGrid puts the real reason inside response.body — surface it.
+            emailErrorMessage = emailError.message;
+            logger.error("[createOrder] Owner email failed:", {
+              message: emailError.message,
+              code: emailError.code,
+              response: emailError.response && emailError.response.body,
+              stack: emailError.stack,
+            });
+            // Note: we still acknowledge the order so the customer's checkout
+            // doesn't fail — the order is already in Firestore. The error is
+            // visible in Cloud Functions logs.
           }
 
           // 6) Return success response
@@ -245,12 +273,81 @@ exports.createOrder = onRequest(
             success: true,
             message: "Order placed successfully. You will receive a confirmation email shortly.",
             orderId,
+            emailSent,
+            emailError: emailErrorMessage,
           });
         } catch (err) {
           logger.error("createOrder failed", err);
           return res.status(500).json({
             error: "Internal server error",
             message: err.message,
+          });
+        }
+      });
+    }
+);
+
+/**
+ * Diagnostic endpoint. Hit GET /api/health/email on the live domain to
+ * verify the real production email pipeline (SendGrid + secrets) without
+ * placing an order. Returns the actual SendGrid error body on failure.
+ */
+exports.healthEmail = onRequest(
+    {
+      region: "europe-west1",
+      secrets: ["SENDGRID_API_KEY", "FROM_EMAIL", "STORE_EMAIL"],
+      cors: true,
+    },
+    (req, res) => {
+      cors(req, res, async () => {
+        const envSummary = {
+          SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? "SET" : "MISSING",
+          FROM_EMAIL: process.env.FROM_EMAIL || "MISSING",
+          STORE_EMAIL: process.env.STORE_EMAIL || "MISSING",
+        };
+
+        try {
+          if (!process.env.SENDGRID_API_KEY) {
+            return res.status(500).json({
+              success: false,
+              error: "SENDGRID_API_KEY secret is not set on this function. " +
+                "Run: firebase functions:secrets:set SENDGRID_API_KEY",
+              env: envSummary,
+            });
+          }
+
+          sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+          const fromEmail = process.env.FROM_EMAIL || "no-reply@nectarperfume.com";
+          const toEmail = process.env.STORE_EMAIL || "YOUR_STORE_EMAIL@GMAIL.COM";
+
+          await sgMail.send({
+            to: toEmail,
+            from: fromEmail,
+            subject: `[health] Email pipeline test ${new Date().toISOString()}`,
+            text: "This is a test email from /api/health/email. " +
+              "If you received it, SendGrid is configured correctly.",
+          });
+
+          return res.json({
+            success: true,
+            message: "Test email sent",
+            recipient: toEmail,
+            from: fromEmail,
+            env: envSummary,
+          });
+        } catch (err) {
+          logger.error("[healthEmail] Failed:", {
+            message: err.message,
+            code: err.code,
+            response: err.response && err.response.body,
+            stack: err.stack,
+          });
+          return res.status(500).json({
+            success: false,
+            error: err.message,
+            // SendGrid's real reason lives here (e.g. "from email not verified")
+            sendgridResponse: err.response && err.response.body,
+            env: envSummary,
           });
         }
       });

@@ -38,16 +38,13 @@ console.log('='.repeat(60));
 console.log(`Order emails should be sent TO: ${config.email.orderEmail || config.email.user || 'NOT CONFIGURED'}`);
 console.log(`Emails will be sent FROM: ${config.email.user || 'NOT CONFIGURED'}`);
 
-if (config.email.orderEmail === 'youssefdahdah44@gmail.com' || config.email.user === 'youssefdahdah44@gmail.com') {
-  console.log('\n⚠️  WARNING: Old email address detected!');
-  console.log('   The server is still using youssefdahdah44@gmail.com');
-  console.log('   Make sure you have:');
-  console.log('   1. Updated server/.env file');
-  console.log('   2. Restarted the server');
-  console.log('   3. If deployed, updated environment variables in Cloud Run/Kubernetes');
+if (config.email.orderEmail === 'lbnectar@gmail.com' || config.email.user === 'lbnectar@gmail.com') {
+  console.log('\n⚠️  WARNING: Legacy shop email detected (lbnectar@gmail.com).');
+  console.log('   Update server/.env to your current Gmail if you have migrated.');
+  console.log('   Then restart the server and redeploy if applicable.');
 }
 
-if (config.email.orderEmail === 'lbnectar@gmail.com' && config.email.user === 'lbnectar@gmail.com') {
+if (config.email.orderEmail === 'youssefdahdah33@gmail.com' && config.email.user === 'youssefdahdah33@gmail.com') {
   console.log('\n✅ Configuration looks correct!');
   console.log('   If emails are still going to the wrong address:');
   console.log('   1. Make sure the server has been restarted');

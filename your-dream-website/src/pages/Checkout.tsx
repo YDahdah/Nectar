@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE, CLOUD_FUNCTION_URL, buildApiUrl, getImageUrl } from "@/lib/config";
+import { getImageUrl, buildApiUrl } from "@/lib/config";
 import { validateDeliveryFields } from "@/lib/checkoutValidation";
 
 const CHECKOUT_SAVED_KEY = "nectar_checkout_saved";
@@ -109,6 +109,9 @@ const Checkout = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Hard guard against double-submit (fast double-click, Enter spam, etc.)
+    if (isSubmitting) return;
+
     if (!validateForm()) {
       return;
     }
@@ -127,7 +130,7 @@ const Checkout = () => {
 
     try {
       // Calculate shipping cost
-      const shippingCost = formData.caza === "North Lebanon" ? 2.0 : 3.0;
+      const shippingCost = formData.caza === "North Lebanon" ? 4.0 : 5.0;
       
       // Calculate subtotal safely from cart items
       const subtotal = (items ?? []).reduce((sum, item) => {
@@ -152,8 +155,8 @@ const Checkout = () => {
         name: item?.name || '',
         price: Number(item?.price) || 0,
         quantity: Number(item?.quantity) || 1,
-        size: item?.size || '',
-        image: item?.image || '',
+        size: (item?.size && String(item.size).trim()) || "Standard",
+        image: item?.image || "",
       }));
 
       const orderData = {
@@ -173,112 +176,79 @@ const Checkout = () => {
         notes: '',
       };
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
 
-      const orderEndpoint = buildApiUrl("/orders/checkout");
-      
-      // Log which endpoint is being used
-      console.log('📡 Checkout endpoint:', orderEndpoint);
-      console.log('   API_BASE:', API_BASE);
-      console.log('   Full URL:', orderEndpoint);
-      console.log('   Using production server (Ubuntu) for email support');
+      const appsScriptUrl = (import.meta.env?.VITE_GOOGLE_APPS_SCRIPT_ORDER_URL as string | undefined)?.trim();
+      // Same-origin `/api/...` in dev (Vite proxy → Node); no hardcoded host.
+      const checkoutUrl = appsScriptUrl || buildApiUrl("/orders/checkout");
 
-      let response: Response;
-      try {
-        response = await fetch(orderEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include", // Include credentials for CORS
-          body: JSON.stringify(orderData),
-        });
-      } catch (networkError) {
-        const errorMsg = CLOUD_FUNCTION_URL
-          ? "Cannot connect to the order service. Please check your internet connection."
-          : "Cannot connect to the checkout server. Start the backend with: cd server && npm start";
-        throw new Error(errorMsg);
-      }
+      const resp = await fetch(checkoutUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(orderData),
+        signal: controller.signal,
+      });
 
-      const contentType = response.headers.get("content-type") ?? "";
-      const isJson = contentType.includes("application/json");
-      let result: { orderId?: string; error?: string; success?: boolean; message?: string; errors?: { field?: string; message?: string }[] } = {};
-      if (isJson) {
+      clearTimeout(timeout);
+
+      if (!resp.ok) {
+        let message = "Error submitting order";
         try {
-          result = await response.json();
-          // Debug: log the FULL response to see what we're getting
-          console.log("=".repeat(60));
-          console.log("📦 FULL CHECKOUT RESPONSE:");
-          console.log(JSON.stringify(result, null, 2));
-          console.log("=".repeat(60));
-          console.log("Response keys:", Object.keys(result));
-          console.log("Has notifications?", !!result.notifications);
-          console.log("Notifications object:", result.notifications);
-          console.log("Response status:", response.status);
-          console.log("Response OK?", response.ok);
+          const text = await resp.text();
+          if (text) {
+            try {
+              const errJson = JSON.parse(text) as { error?: string; message?: string };
+              message = errJson.error || errJson.message || text;
+            } catch {
+              message = text;
+            }
+          }
         } catch {
-          throw new Error("Invalid response from server. Please try again.");
+          // ignore
         }
+        throw new Error(message);
       }
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error(
-            "Checkout endpoint not found. If using local dev, start the backend (cd server && npm start) and set VITE_PROXY_TARGET=http://localhost:3000 in .env."
-          );
-        }
-        const msg =
-          result?.error ||
-          result?.message ||
-          (result?.errors?.length ? result.errors.map((e) => e.message).filter(Boolean).join(". ") : null) ||
-          (response.status === 502 ? "Backend unavailable. Is the server running?" : "Failed to place order");
-        throw new Error(msg);
+      let data: any = null;
+      try {
+        data = await resp.json();
+      } catch {
+        // Apps Script often returns plain text
+        data = null;
       }
 
-      // Ensure orderId exists - check multiple possible field names
-      if (!result.orderId) {
-        // Try alternative field names
-        const orderId = (result as any).order_id || (result as any).orderID || (result as any).id;
-        if (orderId) {
-          result.orderId = String(orderId);
-        } else if (result.success) {
-          // Generate a temporary one for display if missing
-          result.orderId = `ORD-${Date.now()}`;
-          console.warn("Order ID missing from response, generated temporary ID:", result.orderId);
-        }
-      }
+      const displayOrderId = data?.orderId || `ORD-${Date.now()}`;
 
-      // Ensure we have an orderId before showing toast
-      const displayOrderId = result.orderId || `ORD-${Date.now()}`;
-      
-      // Check if email was sent successfully
-      const notifications = (result as any).notifications;
-      const ownerEmailSent = notifications?.email;
-      const customerEmailSent = notifications?.customerEmail;
-      const emailError = notifications?.customerEmailError;
-      
-      // Log notification status for debugging
-      console.log('📧 Email notification status:', {
-        ownerEmail: ownerEmailSent,
-        customerEmail: customerEmailSent,
-        error: emailError
-      });
-      
-      // Show appropriate message based on email status
-      let description = `Your order #${displayOrderId} has been received.`;
-      if (customerEmailSent) {
-        description += ' Check your email for confirmation.';
-      } else if (emailError) {
-        description += ` Email confirmation could not be sent: ${emailError}`;
-      } else {
-        description += ' You will receive a confirmation email shortly.';
-      }
-      
+      // Email delivery is fully owned by the backend (Nodemailer in
+      // server/services/emailService.js, or the Cloud Function in
+      // functions/index.js for the live domain). We just surface its result.
       toast({
-        title: "Order placed successfully!",
-        description: description,
+        title: "Order submitted successfully.",
       });
 
+      // Reset UI + form after success
       clearCart();
+      setFormErrors({});
+      setOrderSummaryOpen(false);
+      setStep(1);
+      setFormData({
+        country: "Lebanon",
+        firstName: "",
+        lastName: "",
+        address: "",
+        city: "",
+        caza: "",
+        phone: "",
+        email: "",
+      });
+      try {
+        localStorage.removeItem(CHECKOUT_SAVED_KEY);
+      } catch {
+        /* ignore */
+      }
 
       // Redirect to order confirmation page
       setTimeout(() => {
@@ -302,7 +272,7 @@ const Checkout = () => {
     }
   };
 
-  const shippingCost = formData.caza === "North Lebanon" ? 2.0 : 3.0;
+  const shippingCost = formData.caza === "North Lebanon" ? 4.0 : 5.0;
   const totalWithShipping = getTotalPrice() + shippingCost;
 
   return (

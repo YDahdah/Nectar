@@ -3,11 +3,13 @@
  * Centralizes magic numbers and strings for better maintainability
  */
 
+import { API_BASE } from "@/lib/config";
+
 /**
  * API Configuration
  */
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'https://api.perfumenectar.com',
+  BASE_URL: API_BASE,
   TIMEOUT: 30000, // 30 seconds
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000, // 1 second
@@ -70,7 +72,7 @@ export const VALIDATION = {
   },
   PHONE: {
     LEBANESE_LENGTH: 8,
-    PATTERN: /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/,
+    PATTERN: /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/,
   },
   ADDRESS: {
     MIN_LENGTH: 5,

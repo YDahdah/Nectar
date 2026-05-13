@@ -146,8 +146,8 @@ const OrderConfirmation = () => {
             </p>
             <p className="text-sm text-[#363636]">
               Contact us at{" "}
-              <a href="mailto:lbnectar@gmail.com" className="text-accent hover:underline">
-                lbnectar@gmail.com
+              <a href="mailto:youssefdahdah33@gmail.com" className="text-accent hover:underline">
+                youssefdahdah33@gmail.com
               </a>
             </p>
           </div>

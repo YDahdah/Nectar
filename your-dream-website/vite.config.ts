@@ -1,15 +1,37 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import type { ServerResponse } from "http";
+import type { ProxyServer } from "http-proxy";
 import { componentTagger } from "lovable-tagger";
 import { imagetools } from "vite-imagetools";
+
+const API_PROXY_TARGET = process.env.VITE_PROXY_TARGET || "http://localhost:3000";
+
+/** When the Node API is down, Vite's proxy used to surface an opaque 500; return JSON instead. */
+function attachApiProxyErrorHandler(proxy: ProxyServer) {
+  proxy.on("error", (_err, _req, res) => {
+    const out = res as ServerResponse;
+    if (!out?.writeHead || out.headersSent) return;
+    out.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+    out.end(
+      JSON.stringify({
+        success: false,
+        error: "Something went wrong, please try again.",
+      }),
+    );
+  });
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   base: "/",
   server: {
-    host: "::",
+    // `true` binds 0.0.0.0 so http://127.0.0.1:8080 and http://localhost:8080 work on Windows.
+    // `::` alone can leave IPv4 localhost refusing connections on some setups.
+    host: true,
     port: 8080,
+    strictPort: false,
     hmr: {
       overlay: false,
     },
@@ -21,19 +43,21 @@ export default defineConfig(({ mode }) => ({
     // Proxy API requests in dev. Set VITE_PROXY_TARGET to use local backend (e.g. http://localhost:3000).
     proxy: {
       '/api': {
-        target: process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+        target: API_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
         // Keep the /api prefix when forwarding to backend
         rewrite: (path) => path,
+        configure: (proxy) => attachApiProxyErrorHandler(proxy),
       },
       // Also proxy /orders for backwards compatibility (though /api/orders should be used)
       '/orders': {
-        target: process.env.VITE_PROXY_TARGET || 'http://localhost:3000',
+        target: API_PROXY_TARGET,
         changeOrigin: true,
         secure: false,
         // Rewrite /orders to /api/orders since backend mounts under /api
         rewrite: (path) => `/api${path}`,
+        configure: (proxy) => attachApiProxyErrorHandler(proxy),
       },
     },
   },

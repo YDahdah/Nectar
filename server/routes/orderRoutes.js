@@ -4,6 +4,7 @@ import { validateOrderData } from '../middleware/validation.js';
 import { checkoutRateLimiter } from '../middleware/security.js';
 import { privateCacheMiddleware } from '../middleware/httpCache.js';
 import { cacheMiddleware } from '../middleware/cache.js';
+import { idempotencyMiddleware } from '../middleware/idempotency.js';
 
 const router = express.Router();
 
@@ -24,6 +25,6 @@ router.get('/:orderId',
 );
 
 // Checkout endpoint with rate limiting and validation
-router.post('/checkout', checkoutRateLimiter, validateOrderData, createOrder);
+router.post('/checkout', checkoutRateLimiter, idempotencyMiddleware, validateOrderData, createOrder);
 
 export default router;

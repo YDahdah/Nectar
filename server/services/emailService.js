@@ -1,6 +1,28 @@
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import nodemailer from 'nodemailer';
 import config from '../config/config.js';
 import logger from '../utils/logger.js';
+
+const __emailServiceDir = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(__emailServiceDir, '..', '.env') });
+
+function logEmailEnvCheck(label = '[emailService] ENV CHECK') {
+  // eslint-disable-next-line no-console
+  console.log(label, {
+    EMAIL_USER: process.env.EMAIL_USER ? 'SET ✓' : 'MISSING ✗',
+    EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? 'SET ✓' : 'MISSING ✗',
+    OWNER_EMAIL: process.env.OWNER_EMAIL ? 'SET ✓' : 'MISSING ✗',
+    ORDER_EMAIL: process.env.ORDER_EMAIL ? 'SET ✓' : 'MISSING ✗',
+    NODE_ENV: process.env.NODE_ENV || 'unset',
+  });
+}
+
+// One-shot boot log so production logs immediately tell us whether the
+// hosting platform actually injected the email env vars (Render/Railway/VPS/etc.).
+// Uses raw console.log so it shows even if `logger` is misconfigured in prod.
+logEmailEnvCheck('[emailService] ENV CHECK (module load)');
 
 // Create transporter - using Gmail SMTP
 let transporter = null;
@@ -810,86 +832,115 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
 }
 
 /**
- * Sends order notification email
+ * Resolves shop owner inbox for new-order alerts.
+ * Priority: OWNER_EMAIL → ORDER_EMAIL → config.orderEmail → sending account (EMAIL_USER).
  */
-export async function sendOrderEmail(orderData, orderId = null) {
-  logger.info('📧 sendOrderEmail called');
+function resolveOwnerNotificationEmail() {
+  return (
+    (process.env.OWNER_EMAIL || "").trim() ||
+    (process.env.ORDER_EMAIL || "").trim() ||
+    (config.email.orderEmail || "").trim() ||
+    (config.email.user || "").trim()
+  );
+}
+
+/**
+ * Sends new-order notification HTML email to the shop owner (OWNER_EMAIL or fallbacks).
+ * @param {Object} order - Full order payload (customer fields, items, totals). Use `orderId` on the object or pass via legacy sendOrderEmail(orderData, id).
+ */
+export async function sendOwnerOrderNotification(order) {
+  const orderId = order?.orderId ?? null;
+
+  logger.info('📧 sendOwnerOrderNotification called');
   logger.info(`   Order ID: ${orderId || 'N/A'}`);
-  logger.info(`   Order data type: ${typeof orderData}`);
-  logger.info(`   Order data keys: ${orderData ? Object.keys(orderData).join(', ') : 'null/undefined'}`);
-  logger.info(`   Has firstName: ${!!orderData?.firstName}`);
-  logger.info(`   Has lastName: ${!!orderData?.lastName}`);
-  logger.info(`   Has email: ${!!orderData?.email}`);
-  logger.info(`   Has items: ${!!orderData?.items}`);
-  
-  if (!orderData) {
-    logger.error('❌ orderData is null or undefined');
+  logger.info(`   Order data type: ${typeof order}`);
+  logger.info(`   Order data keys: ${order ? Object.keys(order).join(', ') : 'null/undefined'}`);
+  logger.info(`   Has firstName: ${!!order?.firstName}`);
+  logger.info(`   Has lastName: ${!!order?.lastName}`);
+  logger.info(`   Has email: ${!!order?.email}`);
+  logger.info(`   Has items: ${!!order?.items}`);
+
+  if (!order || typeof order !== 'object') {
+    logger.error('❌ sendOwnerOrderNotification: order is missing or invalid');
     return {
       success: false,
       error: 'Order data is missing',
-      method: 'email'
+      method: 'email',
     };
   }
-  
+
+  const recipientEmail = resolveOwnerNotificationEmail();
+  if (!recipientEmail || !recipientEmail.includes('@')) {
+    logger.warn(
+      '⚠️ OWNER_EMAIL / ORDER_EMAIL / order inbox not configured. Owner order email skipped. Set OWNER_EMAIL in server/.env',
+    );
+    return {
+      success: false,
+      error: 'Owner email not configured',
+      method: 'email',
+    };
+  }
+
   const emailTransporter = initializeTransporter();
-  
+
   if (!emailTransporter) {
-    logger.error('❌ Email transporter not initialized. Email will not be sent.');
-    logger.error('   Check server logs for email configuration errors');
+    logger.error('❌ Email transporter not initialized. Owner notification will not be sent.');
+    logger.error('   Set EMAIL_USER and EMAIL_PASSWORD (Gmail App Password) in server/.env');
     return {
       success: false,
       error: 'Email transporter not configured',
-      method: 'email'
+      method: 'email',
     };
   }
-  
+
   logger.info('✅ Email transporter is initialized');
 
-  // Get client's email and name from order data
-  const clientEmail = orderData.email || 'No email provided';
-  const clientName = `${orderData.firstName} ${orderData.lastName}`;
-  
-  // Your email: orders are sent here on every checkout
-  const recipientEmail = config.email.orderEmail || config.email.user;
+  const clientEmail = order.email || 'No email provided';
+  const clientName = `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
   const emailUser = config.email.user;
 
-  // CRITICAL: Gmail requires sending FROM the authenticated email address
-  // Use your authenticated email as sender, but include client info in subject/headers
   const mailOptions = {
     from: `"${config.email.shopName || 'Nectar Shop'}" <${emailUser}>`,
-    replyTo: clientEmail || emailUser,
+    replyTo: clientEmail !== 'No email provided' && clientEmail ? clientEmail : emailUser,
     to: recipientEmail,
-    subject: `🛍️ New Order from ${clientName} (${clientEmail}) - ${orderId || 'Order'}`,
-    text: formatOrderEmailText(orderData, orderId),
-    html: formatOrderEmailHTML(orderData, orderId),
+    subject: `🛍️ New Order from ${clientName} (${clientEmail}) — ${orderId || 'Order'}`,
+    text: formatOrderEmailText(order, orderId),
+    html: formatOrderEmailHTML(order, orderId),
     headers: {
       'X-Client-Email': clientEmail,
       'X-Client-Name': clientName,
-      'X-Order-ID': orderId || 'N/A'
-    }
+      'X-Order-ID': orderId || 'N/A',
+    },
   };
 
   try {
-    logger.info(`📧 Attempting to send order email:`);
+    logEmailEnvCheck('[emailService] ENV CHECK (before owner send)');
+    // eslint-disable-next-line no-console
+    console.log('[emailService] Attempting to send owner email to:', recipientEmail);
+    // eslint-disable-next-line no-console
+    console.log('[emailService] Using Gmail account:', process.env.EMAIL_USER);
+
+    logger.info(`📧 Sending owner order notification:`);
     logger.info(`   From: ${emailUser}`);
     logger.info(`   To: ${recipientEmail}`);
     logger.info(`   Subject: ${mailOptions.subject}`);
-    logger.info(`   Order ID: ${orderId}`);
-    
+
     const info = await emailTransporter.sendMail(mailOptions);
-    
-    logger.info(`✅ Email sent successfully to ${recipientEmail}`);
+
+    // eslint-disable-next-line no-console
+    console.log('[emailService] Owner email sent successfully:', info.messageId);
+
+    logger.info(`✅ Owner notification sent to ${recipientEmail}`);
     logger.info(`   Message ID: ${info.messageId}`);
     logger.info(`   Response: ${info.response || 'N/A'}`);
 
-    // Check if email was actually accepted
     if (info.rejected && info.rejected.length > 0) {
       logger.error(`⚠️ Email was rejected by server: ${info.rejected.join(', ')}`);
       return {
         success: false,
         error: `Email rejected: ${info.rejected.join(', ')}`,
         method: 'email',
-        recipient: recipientEmail
+        recipient: recipientEmail,
       };
     }
 
@@ -897,36 +948,42 @@ export async function sendOrderEmail(orderData, orderId = null) {
       success: true,
       messageId: info.messageId,
       method: 'email',
-      recipient: recipientEmail
+      recipient: recipientEmail,
     };
   } catch (error) {
-    logger.error('❌ Email sending error:', {
+    logger.error('❌ Owner notification email error:', {
       message: error.message,
       code: error.code,
       command: error.command,
       response: error.response,
-      responseCode: error.responseCode
+      responseCode: error.responseCode,
     });
-    
+
     if (error.code === 'EAUTH') {
-      logger.error('⚠️ Gmail authentication failed. Check:');
-      logger.error('   1. EMAIL_USER in server/.env is correct');
-      logger.error('   2. EMAIL_PASSWORD is a Gmail App Password (not your regular password)');
-      logger.error('   3. 2-Step Verification is enabled on your Google account');
-      logger.error('   Create App Password: https://myaccount.google.com/apppasswords');
+      logger.error('⚠️ Gmail authentication failed. Check EMAIL_USER and EMAIL_PASSWORD (App Password).');
     } else if (error.code === 'EENVELOPE') {
       logger.error(`⚠️ Invalid email address: ${error.message}`);
     } else if (error.code === 'ECONNECTION') {
-      logger.error('⚠️ Connection to Gmail SMTP failed. Check your internet connection.');
+      logger.error('⚠️ Connection to Gmail SMTP failed.');
     }
-    
+
     return {
       success: false,
       error: error.message,
       errorCode: error.code,
       method: 'email',
-      recipient: recipientEmail
+      recipient: recipientEmail,
     };
   }
+}
+
+/**
+ * @deprecated Prefer sendOwnerOrderNotification({ ...orderData, orderId }) — kept for tests and scripts.
+ */
+export async function sendOrderEmail(orderData, orderId = null) {
+  return sendOwnerOrderNotification({
+    ...orderData,
+    orderId: orderId ?? orderData?.orderId ?? null,
+  });
 }
 
