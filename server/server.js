@@ -38,9 +38,6 @@ const corsOrigins = config.security.corsOrigins || [
   "https://perfumenectar.com",
   "https://www.perfumenectar.com",
   "http://localhost:5173",
-  "http://localhost:8080",
-  "http://localhost:3000",
-  "http://127.0.0.1:8080",
 ];
 
 // CORS origin validation function
@@ -205,9 +202,37 @@ app.use(compression({
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Serve static files from frontend dist directory if it exists
-// This ensures JavaScript modules are served with correct MIME type
+// Frontend static files: local/monolith only. Render + Firebase = API-only (NODE_ENV=production
+// disables static). Override with SERVE_STATIC_FRONTEND=true|false|0.
 const frontendDistPath = join(__dirname, '../your-dream-website/dist');
+const distExists = existsSync(frontendDistPath);
+const staticEnv = process.env.SERVE_STATIC_FRONTEND?.toLowerCase();
+const serveStaticFrontend =
+  staticEnv === "true"
+    ? distExists
+    : staticEnv === "false" || staticEnv === "0"
+      ? false
+      : config.nodeEnv !== "production" && distExists;
+
+if (serveStaticFrontend) {
+  logger.info(`✅ Serving frontend static files from: ${frontendDistPath}`);
+} else {
+  if (staticEnv === "true" && !distExists) {
+    logger.warn(
+      `SERVE_STATIC_FRONTEND=true but no dist at ${frontendDistPath} — static files not served`,
+    );
+  } else if (config.nodeEnv === "production") {
+    logger.info(
+      "📡 API-only mode: static frontend disabled in production (e.g. Render backend + Firebase hosting).",
+    );
+  } else if (!distExists) {
+    logger.info(
+      `📡 No frontend build at ${frontendDistPath} — running API only.`,
+    );
+  } else {
+    logger.info("📡 Static frontend disabled (SERVE_STATIC_FRONTEND=false). API only.");
+  }
+}
 
 // Fix common wrong MIME types for module assets
 mime.define(
@@ -221,7 +246,7 @@ mime.define(
 
 // CRITICAL: Explicitly handle /assets/* paths FIRST - NEVER rewrite to index.html
 // This ensures /assets/*.js files are served with correct MIME type and never fall through to SPA
-if (existsSync(frontendDistPath)) {
+if (serveStaticFrontend) {
   app.use('/assets', (req, res, next) => {
     const filePath = join(frontendDistPath, req.path);
     
@@ -252,7 +277,7 @@ if (existsSync(frontendDistPath)) {
   });
 }
 
-if (existsSync(frontendDistPath)) {
+if (serveStaticFrontend) {
   // CRITICAL: Serve static assets FIRST with explicit MIME types
   // This MUST come BEFORE any other routes to prevent SPA fallback from catching JS files
   app.use(express.static(frontendDistPath, {
@@ -284,8 +309,6 @@ if (existsSync(frontendDistPath)) {
     redirect: false,
   }));
   
-  logger.info(`✅ Static files serving enabled from: ${frontendDistPath}`);
-  
   // Log available files for debugging
   try {
     const assetsPath = join(frontendDistPath, 'assets');
@@ -300,44 +323,45 @@ if (existsSync(frontendDistPath)) {
   } catch (err) {
     logger.debug('Could not list assets directory:', err.message);
   }
-} else {
-  logger.error(`❌ Frontend dist directory not found at: ${frontendDistPath}`);
-  logger.error(`   Current working directory: ${process.cwd()}`);
-  logger.error(`   __dirname: ${__dirname}`);
 }
 
 // MIME type middleware - runs AFTER static file serving
 // This ensures headers are set correctly even if express.static doesn't catch it
 app.use((req, res, next) => {
   const path = req.path.toLowerCase();
-  
-  // CRITICAL FIX: JavaScript modules MUST use application/javascript
-  // Only set if not already set by express.static
-  if ((path.endsWith('.js') || path.endsWith('.mjs')) && !res.getHeader('Content-Type')) {
-    res.type('application/javascript');
-    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    logger.warn(`⚠️  JS file MIME type set by middleware (not by express.static): ${req.path}`);
-  } else if (path.endsWith('.css') && !res.getHeader('Content-Type')) {
-    res.type('text/css');
-    res.setHeader('Content-Type', 'text/css; charset=utf-8');
-  } else if (path.endsWith('.json') && !res.getHeader('Content-Type')) {
-    res.type('application/json');
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  } else if (path.endsWith('.html') && !res.getHeader('Content-Type')) {
-    res.type('text/html');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  } else if (path.endsWith('.wasm') && !res.getHeader('Content-Type')) {
-    res.type('application/wasm');
-    res.setHeader('Content-Type', 'application/wasm');
-  } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i) && !res.getHeader('Content-Type')) {
-    res.setHeader('Content-Type', 'font/woff2');
+
+  if (serveStaticFrontend) {
+    // CRITICAL FIX: JavaScript modules MUST use application/javascript
+    // Only set if not already set by express.static
+    if ((path.endsWith('.js') || path.endsWith('.mjs')) && !res.getHeader('Content-Type')) {
+      res.type('application/javascript');
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      logger.warn(`⚠️  JS file MIME type set by middleware (not by express.static): ${req.path}`);
+    } else if (path.endsWith('.css') && !res.getHeader('Content-Type')) {
+      res.type('text/css');
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (path.endsWith('.json') && !res.getHeader('Content-Type')) {
+      res.type('application/json');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    } else if (path.endsWith('.html') && !res.getHeader('Content-Type')) {
+      res.type('text/html');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    } else if (path.endsWith('.wasm') && !res.getHeader('Content-Type')) {
+      res.type('application/wasm');
+      res.setHeader('Content-Type', 'application/wasm');
+    } else if (path.match(/\.(woff2|woff|ttf|eot|otf)$/i) && !res.getHeader('Content-Type')) {
+      res.setHeader('Content-Type', 'font/woff2');
+    }
   }
-  
+
   // Add CDN cache control headers
   if (req.path.startsWith('/api/')) {
     res.setHeader('CDN-Cache-Control', 'public, max-age=300, s-maxage=300');
-  } else if (req.path.match(/\.(js|mjs|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)) {
+  } else if (
+    serveStaticFrontend &&
+    req.path.match(/\.(js|mjs|css|woff2|woff|ttf|eot|jpg|jpeg|png|gif|webp|svg|ico|wasm)$/i)
+  ) {
     res.setHeader('CDN-Cache-Control', 'public, max-age=31536000, immutable');
     if (!res.getHeader('Cache-Control')) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -521,56 +545,53 @@ app.use((req, res, next) => {
   next();
 });
 
-// CRITICAL: Block static asset requests from reaching SPA fallback
-// This middleware MUST run AFTER express.static but BEFORE SPA fallback
-// It catches any static asset requests that express.static didn't handle
+// Block static-asset paths from reaching SPA fallback (404 JSON, never index.html)
 app.use((req, res, next) => {
-  // Check if this is a static asset request
   const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
-  
-  if (isStaticAsset) {
-    // Double-check if file exists (express.static should have caught it if it exists)
-    const filePath = join(frontendDistPath, req.path);
-    
-    if (existsSync(filePath)) {
-      // File exists but express.static didn't serve it - this shouldn't happen
-      // But let's serve it directly to be safe
-      logger.warn(`⚠️ File exists but express.static didn't serve it: ${req.path}`);
-      const ext = extname(filePath).toLowerCase();
-      if (ext === '.js' || ext === '.mjs') {
-        res.type('application/javascript');
-        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-      }
-      return res.sendFile(resolve(filePath));
-    }
-    
-    // File doesn't exist - CRITICAL: Return 404 JSON, NEVER serve index.html
-    logger.error(`❌ Static file not found: ${req.path}`);
-    logger.error(`   Attempted path: ${filePath}`);
-    logger.error(`   Frontend dist path: ${frontendDistPath}`);
-    logger.error(`   Request URL: ${req.url}`);
-    logger.error(`   Request method: ${req.method}`);
-    
-    // Set headers BEFORE sending response - CRITICAL to prevent HTML
-    res.status(404);
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    
-    // Send JSON response - this prevents any HTML from being sent
-    return res.end(JSON.stringify({ 
-      error: 'File not found',
-      path: req.path,
-      message: 'Static file not found. This should never return HTML.'
-    }));
+  if (!isStaticAsset) {
+    return next();
   }
-  
-  next();
+
+  if (!serveStaticFrontend) {
+    res.status(404);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    return res.json({
+      error: "Not found",
+      message: "This host only serves the API. Static assets are hosted with the frontend.",
+    });
+  }
+
+  const filePath = join(frontendDistPath, req.path);
+
+  if (existsSync(filePath)) {
+    logger.warn(`⚠️ File exists but express.static didn't serve it: ${req.path}`);
+    const ext = extname(filePath).toLowerCase();
+    if (ext === ".js" || ext === ".mjs") {
+      res.type("application/javascript");
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    }
+    return res.sendFile(resolve(filePath));
+  }
+
+  logger.warn(`Static file not found: ${req.path} (dist: ${frontendDistPath})`);
+  res.status(404);
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  return res.json({
+    error: "File not found",
+    path: req.path,
+    message: "Static file not found.",
+  });
 });
 
-// SPA fallback - serve index.html for non-API routes (must be AFTER API routes and static files)
-// CRITICAL: Static assets are blocked by middleware above, so this will NEVER catch .js files
+// SPA fallback — only when this process serves the Vite build (local / monolith)
 app.use((req, res, next) => {
+  if (!serveStaticFrontend) {
+    return next();
+  }
+
   // TRIPLE-CHECK: NEVER serve index.html for static assets (absolute safety)
   const isStaticAsset = req.path.match(/\.(js|mjs|css|json|woff2|woff|ttf|eot|otf|jpg|jpeg|png|gif|webp|svg|ico|wasm|map)$/i);
   if (isStaticAsset) {
@@ -617,25 +638,22 @@ app.use((req, res, next) => {
     return next(); // Let 404 handler catch it
   }
   
-  // Only serve index.html for actual routes (not files)
-  if (existsSync(frontendDistPath)) {
-    const indexPath = join(frontendDistPath, 'index.html');
-    
-    // CRITICAL: Set cache headers BEFORE sending file
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        logger.error('Error serving index.html:', err);
-        next();
-      }
-    });
-  } else {
-    next();
+  const indexPath = join(frontendDistPath, "index.html");
+  if (!existsSync(indexPath)) {
+    return next();
   }
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      logger.error("Error serving index.html:", err);
+      next();
+    }
+  });
 });
 
 // 404 handler

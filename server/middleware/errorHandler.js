@@ -28,7 +28,6 @@ function addCorsHeaders(req, res) {
     "https://perfumenectar.com",
     "https://www.perfumenectar.com",
     "http://localhost:5173",
-    "http://localhost:3000",
   ];
 
   if (origin) {
