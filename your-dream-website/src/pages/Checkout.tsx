@@ -11,10 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { getImageUrl, buildApiUrl } from "@/lib/config";
+import { getImageUrl, buildApiUrl, API_BASE } from "@/lib/config";
 import { validateDeliveryFields } from "@/lib/checkoutValidation";
 
 const CHECKOUT_SAVED_KEY = "nectar_checkout_saved";
+
+// HTTP statuses returned by Render's edge proxy while the free-tier service is
+// spinning back up. They carry no CORS headers (they don't come from our
+// Express app), so the browser surfaces them as a generic "Failed to fetch" /
+// CORS error. We treat them as retryable cold-start signals.
+const COLD_START_STATUSES = new Set([502, 503, 504]);
 
 const STEPS = [
   { id: 1, label: "Delivery", short: "Delivery" },
@@ -64,6 +70,26 @@ const Checkout = () => {
     } catch {
       /* ignore invalid stored data */
     }
+  }, []);
+
+  // Pre-warm the backend so the cold start (Render free tier spins down after
+  // ~15 min of inactivity) happens while the customer is filling in the form,
+  // not when they click "Place Order". Fire-and-forget — failures are fine.
+  useEffect(() => {
+    const isAbsolute = /^https?:\/\//i.test(API_BASE);
+    if (!isAbsolute) return; // Same-origin / dev proxy — no cold start to warm
+    const healthUrl = `${API_BASE.replace(/\/api$/, "")}/health`;
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 15_000);
+    fetch(healthUrl, { method: "GET", signal: controller.signal, cache: "no-store" })
+      .catch(() => {
+        /* expected during cold start — the next GET will succeed */
+      })
+      .finally(() => clearTimeout(t));
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, []);
 
   const handleInputChange = (field: string, value: string) => {
@@ -180,14 +206,11 @@ const Checkout = () => {
       // plus the email send (~1–5s). The backend has its own 22s email-send cap
       // and always responds, so this only kicks in for genuine network stalls.
       const CHECKOUT_TIMEOUT_MS = 60_000;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => {
-        try {
-          controller.abort(new DOMException("Request timed out", "TimeoutError"));
-        } catch {
-          controller.abort();
-        }
-      }, CHECKOUT_TIMEOUT_MS);
+      // Delay between retry attempts. Long enough for Render's free-tier
+      // service to finish spinning up after a cold start.
+      const COLD_START_RETRY_DELAY_MS = 10_000;
+      // Total retry budget: 1 = no retry, 2 = one retry (the cold-start case).
+      const MAX_ATTEMPTS = 2;
 
       const API_URL = import.meta.env.VITE_API_URL;
       const appsScriptUrl = (import.meta.env?.VITE_GOOGLE_APPS_SCRIPT_ORDER_URL as string | undefined)?.trim();
@@ -195,35 +218,88 @@ const Checkout = () => {
         appsScriptUrl ||
         (API_URL ? `${API_URL.replace(/\/$/, "")}/api/orders/checkout` : buildApiUrl("/orders/checkout"));
 
-      let resp: Response;
-      try {
-        resp = await fetch(checkoutUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(orderData),
-          signal: controller.signal,
+      const notifyColdStart = () => {
+        toast({
+          title: "Server is waking up…",
+          description: "The shop server was idle. Retrying in a few seconds — please don't refresh.",
         });
-      } catch (fetchErr) {
-        clearTimeout(timeout);
-        if (
-          (fetchErr instanceof DOMException && fetchErr.name === "AbortError") ||
-          (fetchErr instanceof Error && fetchErr.name === "AbortError")
-        ) {
-          throw new Error(
-            "The order request took too long to complete. Please check your connection and try again, or contact us directly.",
-          );
+      };
+
+      // One-shot fetch helper. Returns the Response (even on non-2xx) or
+      // throws a TypeError / AbortError. Cold-start retry is handled below.
+      const attemptOnce = async (): Promise<Response> => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+          try {
+            controller.abort(new DOMException("Request timed out", "TimeoutError"));
+          } catch {
+            controller.abort();
+          }
+        }, CHECKOUT_TIMEOUT_MS);
+        try {
+          return await fetch(checkoutUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(orderData),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
         }
-        if (fetchErr instanceof TypeError) {
-          throw new Error(
-            "Could not reach the order server. Please check your internet connection and try again.",
-          );
+      };
+
+      let resp: Response | null = null;
+      let lastFetchError: unknown = null;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const r = await attemptOnce();
+          // Retry on Render's "no live instance" responses. They have no CORS
+          // headers, but since we read .status (not .body), CORS isn't needed
+          // for the status check on opaque-ish responses — and in practice
+          // Render's 502 page does reach the browser as a regular response.
+          if (COLD_START_STATUSES.has(r.status) && attempt < MAX_ATTEMPTS) {
+            notifyColdStart();
+            await new Promise((res) => setTimeout(res, COLD_START_RETRY_DELAY_MS));
+            continue;
+          }
+          resp = r;
+          break;
+        } catch (fetchErr) {
+          lastFetchError = fetchErr;
+          const isAbort =
+            (fetchErr instanceof DOMException && fetchErr.name === "AbortError") ||
+            (fetchErr instanceof Error && fetchErr.name === "AbortError");
+          // A TypeError from fetch on a cross-origin POST almost always means
+          // the preflight or main response was rejected — on Render, that
+          // typically means a cold-start 502 with no CORS headers. Retry once.
+          const isLikelyColdStart = fetchErr instanceof TypeError;
+          if (!isAbort && isLikelyColdStart && attempt < MAX_ATTEMPTS) {
+            notifyColdStart();
+            await new Promise((res) => setTimeout(res, COLD_START_RETRY_DELAY_MS));
+            continue;
+          }
+          if (isAbort) {
+            throw new Error(
+              "The order request took too long to complete. Please check your connection and try again, or contact us directly.",
+            );
+          }
+          if (fetchErr instanceof TypeError) {
+            throw new Error(
+              "Could not reach the order server. Please check your internet connection and try again.",
+            );
+          }
+          throw fetchErr;
         }
-        throw fetchErr;
       }
 
-      clearTimeout(timeout);
+      if (!resp) {
+        // Defensive: should be unreachable because the loop either returns a
+        // Response or throws, but keep TypeScript happy and surface a clear
+        // message if it ever does fall through.
+        throw (lastFetchError instanceof Error
+          ? lastFetchError
+          : new Error("Could not reach the order server. Please try again."));
+      }
 
       if (!resp.ok) {
         let message = "Error submitting order";

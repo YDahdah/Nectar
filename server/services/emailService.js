@@ -15,8 +15,111 @@ function logEmailEnvCheck(label = '[emailService] ENV CHECK') {
     EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? 'SET ✓' : 'MISSING ✗',
     OWNER_EMAIL: process.env.OWNER_EMAIL ? 'SET ✓' : 'MISSING ✗',
     ORDER_EMAIL: process.env.ORDER_EMAIL ? 'SET ✓' : 'MISSING ✗',
+    RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET ✓' : 'MISSING ✗',
     NODE_ENV: process.env.NODE_ENV || 'unset',
   });
+}
+
+// Resend HTTP API. Used as the primary owner-notification transport whenever
+// RESEND_API_KEY is set, because Render's free tier blocks outbound SMTP to
+// Gmail (ports 587/465), which makes nodemailer hang and quietly drop the
+// order email. Resend is a plain HTTPS call so it works on every Render plan.
+//
+// To enable:
+//   1) Sign up at https://resend.com and copy your API key (starts with re_)
+//   2) Set RESEND_API_KEY in server/.env (and on Render)
+//   3) Optionally set RESEND_FROM_EMAIL to a verified sender. Defaults to
+//      Resend's shared sandbox sender "onboarding@resend.dev", which can only
+//      deliver to the email address that owns the Resend account — which is
+//      fine here because we only email the shop owner.
+function isResendConfigured() {
+  return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim());
+}
+
+async function sendViaResend({ to, subject, html, text, replyTo }) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    return { success: false, error: 'RESEND_API_KEY not set', skipped: true };
+  }
+
+  const shopName = (process.env.SHOP_NAME || config.email.shopName || 'Nectar Perfume Shop').trim();
+  const fromAddress = (process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev').trim();
+  const from = `${shopName} <${fromAddress}>`;
+
+  const payload = {
+    from,
+    to: Array.isArray(to) ? to : [to],
+    subject,
+    html,
+    text,
+  };
+  if (replyTo) payload.reply_to = replyTo;
+
+  // 15s cap — Resend normally responds in <1s. Anything longer means the
+  // hosting platform is rate-limiting outbound HTTPS, and we should fall back
+  // to nodemailer rather than stall the checkout request.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    const bodyText = await resp.text();
+    let body = null;
+    try {
+      body = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+      body = { raw: bodyText };
+    }
+
+    if (!resp.ok) {
+      logger.error('❌ Resend rejected the request', {
+        status: resp.status,
+        body,
+      });
+      return {
+        success: false,
+        error: body?.message || `Resend HTTP ${resp.status}`,
+        errorCode: body?.name || `HTTP_${resp.status}`,
+        method: 'resend',
+      };
+    }
+
+    logger.info('✅ Owner notification sent via Resend', { id: body?.id });
+    return {
+      success: true,
+      messageId: body?.id,
+      method: 'resend',
+      recipient: payload.to.join(', '),
+    };
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      logger.error('❌ Resend request timed out after 15s');
+      return {
+        success: false,
+        error: 'Resend request timed out',
+        errorCode: 'TIMEOUT',
+        method: 'resend',
+      };
+    }
+    logger.error('❌ Resend request threw', { message: err?.message });
+    return {
+      success: false,
+      error: err?.message || 'Resend request failed',
+      errorCode: err?.code,
+      method: 'resend',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // One-shot boot log so production logs immediately tell us whether the
@@ -71,12 +174,28 @@ export async function verifyEmailConfig({ timeoutMs = 8000 } = {}) {
     EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? 'SET' : 'MISSING',
     OWNER_EMAIL: process.env.OWNER_EMAIL ? 'SET' : 'MISSING',
     ORDER_EMAIL: process.env.ORDER_EMAIL ? 'SET' : 'MISSING',
+    RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'MISSING',
     NODE_ENV: process.env.NODE_ENV || 'unset',
   };
+
+  const resendConfigured = isResendConfigured();
 
   try {
     const t = initializeTransporter();
     if (!t) {
+      if (resendConfigured) {
+        // Resend is the only available transport, but we can't really verify
+        // it without sending an email or making an authenticated probe. Report
+        // it as the primary, partially-verified path.
+        return {
+          success: true,
+          emailConfigured: true,
+          primaryTransport: 'resend',
+          smtp: { available: false, reason: 'EMAIL_USER / EMAIL_PASSWORD not set (Gmail SMTP disabled)' },
+          env,
+          message: 'Resend HTTP API configured; Gmail SMTP fallback not configured',
+        };
+      }
       return {
         success: false,
         emailConfigured: false,
@@ -97,13 +216,34 @@ export async function verifyEmailConfig({ timeoutMs = 8000 } = {}) {
       return {
         success: true,
         emailConfigured: true,
+        primaryTransport: resendConfigured ? 'resend' : 'smtp',
+        smtp: { available: true },
+        resend: { configured: resendConfigured },
         env,
-        message: 'SMTP credentials verified (no email sent)',
+        message: resendConfigured
+          ? 'Resend HTTP API configured; Gmail SMTP also verified (fallback ready)'
+          : 'SMTP credentials verified (no email sent)',
       };
     }
 
     if (verifyResult.timedOut) {
       logger.warn('verifyEmailConfig: SMTP verify timed out', { timeoutMs });
+      if (resendConfigured) {
+        // SMTP is blocked (the common Render free-tier case) but Resend is
+        // configured — the owner email path will still work.
+        return {
+          success: true,
+          emailConfigured: true,
+          primaryTransport: 'resend',
+          smtp: {
+            available: false,
+            reason: `SMTP verify timed out after ${timeoutMs}ms (host likely blocks outbound SMTP)`,
+          },
+          resend: { configured: true },
+          env,
+          message: 'Resend HTTP API will be used (Gmail SMTP unreachable)',
+        };
+      }
       return {
         success: false,
         emailConfigured: false,
@@ -118,6 +258,17 @@ export async function verifyEmailConfig({ timeoutMs = 8000 } = {}) {
       message: err.message,
       code: err.code,
     });
+    if (resendConfigured) {
+      return {
+        success: true,
+        emailConfigured: true,
+        primaryTransport: 'resend',
+        smtp: { available: false, reason: err.message, errorCode: err.code },
+        resend: { configured: true },
+        env,
+        message: 'Resend HTTP API will be used (Gmail SMTP unreachable)',
+      };
+    }
     return {
       success: false,
       emailConfigured: false,
@@ -999,6 +1150,35 @@ export async function sendOwnerOrderNotification(order) {
     };
   }
 
+  const clientEmailEarly = order.email || 'No email provided';
+  const clientNameEarly =
+    `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
+  const subject = `🛍️ New Order from ${clientNameEarly} (${clientEmailEarly}) — ${orderId || 'Order'}`;
+  const htmlBody = formatOrderEmailHTML(order, orderId);
+  const textBody = formatOrderEmailText(order, orderId);
+  const replyToEmail =
+    clientEmailEarly !== 'No email provided' && clientEmailEarly ? clientEmailEarly : undefined;
+
+  // Prefer Resend whenever it's configured. On hosts that block outbound SMTP
+  // (e.g. Render's free tier) this is the only path that actually delivers.
+  if (isResendConfigured()) {
+    logger.info('📧 Owner notification: trying Resend HTTP API first');
+    const resendResult = await sendViaResend({
+      to: recipientEmail,
+      subject,
+      html: htmlBody,
+      text: textBody,
+      replyTo: replyToEmail,
+    });
+    if (resendResult.success) {
+      return { ...resendResult, recipient: recipientEmail };
+    }
+    logger.warn('⚠️ Resend failed, falling back to Gmail SMTP', {
+      error: resendResult.error,
+      errorCode: resendResult.errorCode,
+    });
+  }
+
   const emailTransporter = initializeTransporter();
 
   if (!emailTransporter) {
@@ -1013,17 +1193,17 @@ export async function sendOwnerOrderNotification(order) {
 
   logger.info('✅ Email transporter is initialized');
 
-  const clientEmail = order.email || 'No email provided';
-  const clientName = `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
+  const clientEmail = clientEmailEarly;
+  const clientName = clientNameEarly;
   const emailUser = config.email.user;
 
   const mailOptions = {
     from: `"${config.email.shopName || 'Nectar Shop'}" <${emailUser}>`,
-    replyTo: clientEmail !== 'No email provided' && clientEmail ? clientEmail : emailUser,
+    replyTo: replyToEmail || emailUser,
     to: recipientEmail,
-    subject: `🛍️ New Order from ${clientName} (${clientEmail}) — ${orderId || 'Order'}`,
-    text: formatOrderEmailText(order, orderId),
-    html: formatOrderEmailHTML(order, orderId),
+    subject,
+    text: textBody,
+    html: htmlBody,
     headers: {
       'X-Client-Email': clientEmail,
       'X-Client-Name': clientName,
