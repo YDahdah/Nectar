@@ -1,3 +1,6 @@
+/** Raw `VITE_API_URL` (trimmed, no trailing slash). Empty when unset — use `buildApiUrl()` or `API_BASE` for `/api` dev proxy. */
+export const API_URL = (import.meta.env.VITE_API_URL ?? "").toString().trim().replace(/\/$/, "");
+
 /** Dev: `/api` (Vite proxy). Prod: `VITE_API_URL` in `.env.production` (e.g. Render) or `VITE_API_BASE_URL`. */
 function resolveApiBase(): string {
   const env = typeof import.meta !== "undefined" ? import.meta.env : undefined;
