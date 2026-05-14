@@ -131,27 +131,37 @@ router.post('/send-email', emailRateLimiter, validateEmailRequest, async (req, r
 
 /**
  * GET /test-email-config
- * Test email configuration without sending an email
- * Cached for 5 minutes since config rarely changes
+ * Test email configuration WITHOUT sending an email.
+ *
+ * Guarantees:
+ *   - Never sends a real email (uses transporter.verify() only).
+ *   - Never hangs (8s hard cap on SMTP verify).
+ *   - Never returns 5xx — always HTTP 200 with a structured JSON body so a
+ *     broken email setup can't trip Render's upstream 502.
+ *
+ * Cached for 5 minutes since config rarely changes.
  */
-router.get('/test-email-config', 
-  httpCacheMiddleware({ maxAge: 300, private: true }), // 5 min private cache
-  cacheMiddleware(5 * 60 * 1000), // 5 min application cache
+router.get(
+  '/test-email-config',
+  httpCacheMiddleware({ maxAge: 300, private: true }),
+  cacheMiddleware(5 * 60 * 1000),
   async (req, res) => {
-  try {
-    const result = await testEmailConfig();
-    
-    if (result.success) {
-      res.status(200).json(result);
-    } else {
-      res.status(500).json(result);
+    try {
+      const result = await testEmailConfig({ timeoutMs: 8000 });
+      return res.status(200).json(result);
+    } catch (error) {
+      logger.error('test-email-config: unexpected exception', {
+        message: error?.message,
+        stack: error?.stack,
+      });
+      return res.status(200).json({
+        success: false,
+        emailConfigured: false,
+        error: 'Email check failed',
+        details: error?.message,
+      });
     }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
-});
+  },
+);
 
 export default router;

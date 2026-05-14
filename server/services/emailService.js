@@ -47,6 +47,100 @@ export function resetTransporter() {
   }
 }
 
+/**
+ * Safely verify SMTP credentials and connectivity WITHOUT sending any email.
+ *
+ * Used by diagnostic endpoints (e.g. /api/health/email). Never throws — always
+ * resolves with a structured result so the route handler can return HTTP 200
+ * JSON in every case. Hard-capped at `timeoutMs` (default 8000ms) so a hung
+ * SMTP connection can never stall the request.
+ *
+ * @param {Object} [options]
+ * @param {number} [options.timeoutMs=8000] - Max time to wait for verify().
+ * @returns {Promise<{
+ *   success: boolean,
+ *   emailConfigured: boolean,
+ *   env: Record<string, string>,
+ *   error?: string,
+ *   errorCode?: string,
+ * }>}
+ */
+export async function verifyEmailConfig({ timeoutMs = 8000 } = {}) {
+  const env = {
+    EMAIL_USER: process.env.EMAIL_USER ? 'SET' : 'MISSING',
+    EMAIL_PASSWORD: process.env.EMAIL_PASSWORD ? 'SET' : 'MISSING',
+    OWNER_EMAIL: process.env.OWNER_EMAIL ? 'SET' : 'MISSING',
+    ORDER_EMAIL: process.env.ORDER_EMAIL ? 'SET' : 'MISSING',
+    NODE_ENV: process.env.NODE_ENV || 'unset',
+  };
+
+  try {
+    const t = initializeTransporter();
+    if (!t) {
+      return {
+        success: false,
+        emailConfigured: false,
+        env,
+        error: 'Email check failed',
+        details: 'Transporter not initialised (missing EMAIL_USER / EMAIL_PASSWORD or placeholder value)',
+      };
+    }
+
+    const verifyResult = await Promise.race([
+      t.verify().then(() => ({ ok: true })).catch((err) => ({ ok: false, err })),
+      new Promise((resolve) =>
+        setTimeout(() => resolve({ ok: false, timedOut: true }), timeoutMs),
+      ),
+    ]);
+
+    if (verifyResult.ok) {
+      return {
+        success: true,
+        emailConfigured: true,
+        env,
+        message: 'SMTP credentials verified (no email sent)',
+      };
+    }
+
+    if (verifyResult.timedOut) {
+      logger.warn('verifyEmailConfig: SMTP verify timed out', { timeoutMs });
+      return {
+        success: false,
+        emailConfigured: false,
+        env,
+        error: 'Email check failed',
+        details: `SMTP verify timed out after ${timeoutMs}ms`,
+      };
+    }
+
+    const err = verifyResult.err || {};
+    logger.warn('verifyEmailConfig: SMTP verify failed', {
+      message: err.message,
+      code: err.code,
+    });
+    return {
+      success: false,
+      emailConfigured: false,
+      env,
+      error: 'Email check failed',
+      details: err.message,
+      errorCode: err.code,
+    };
+  } catch (err) {
+    logger.error('verifyEmailConfig: unexpected exception', {
+      message: err?.message,
+      stack: err?.stack,
+    });
+    return {
+      success: false,
+      emailConfigured: false,
+      env,
+      error: 'Email check failed',
+      details: err?.message,
+    };
+  }
+}
+
 function initializeTransporter() {
   // Always check current config values
   const currentEmailUser = config.email.user;

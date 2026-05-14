@@ -53,6 +53,9 @@ async function createOAuth2Transporter() {
       refreshToken: GOOGLE_REFRESH_TOKEN,
       accessToken: accessToken.token,
     },
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 15_000,
   });
 }
 
@@ -72,6 +75,9 @@ function createAppPasswordTransporter() {
       user: GMAIL_USER,
       pass: GMAIL_APP_PASSWORD,
     },
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 15_000,
   });
 }
 
@@ -212,20 +218,73 @@ export function getAuthMethod() {
 /**
  * Test email configuration
  */
-export async function testEmailConfig() {
+/**
+ * Verify Gmail SMTP configuration WITHOUT sending an email.
+ *
+ * Never throws, never sends mail, hard-capped at `timeoutMs` (default 8000ms).
+ * Always resolves with a structured result for safe HTTP 200 JSON responses.
+ *
+ * @param {Object} [options]
+ * @param {number} [options.timeoutMs=8000]
+ */
+export async function testEmailConfig({ timeoutMs = 8000 } = {}) {
   try {
-    const emailTransporter = await initializeTransporter();
-    await emailTransporter.verify();
-    return {
-      success: true,
-      method: authMethod,
-      message: `Email service configured successfully using ${authMethod}`,
-    };
-  } catch (error) {
+    const initPromise = initializeTransporter()
+      .then((t) => t.verify())
+      .then(() => ({ ok: true }))
+      .catch((err) => ({ ok: false, err }));
+
+    const result = await Promise.race([
+      initPromise,
+      new Promise((resolve) =>
+        setTimeout(() => resolve({ ok: false, timedOut: true }), timeoutMs),
+      ),
+    ]);
+
+    if (result.ok) {
+      return {
+        success: true,
+        emailConfigured: true,
+        method: authMethod,
+        message: `Email service configured successfully using ${authMethod}`,
+      };
+    }
+
+    if (result.timedOut) {
+      logger.warn('testEmailConfig: verify timed out', { timeoutMs });
+      return {
+        success: false,
+        emailConfigured: false,
+        method: authMethod,
+        error: 'Email check failed',
+        details: `SMTP verify timed out after ${timeoutMs}ms`,
+      };
+    }
+
+    const err = result.err || {};
+    logger.warn('testEmailConfig: verify failed', {
+      message: err.message,
+      code: err.code,
+    });
     return {
       success: false,
+      emailConfigured: false,
       method: authMethod,
-      error: error.message,
+      error: 'Email check failed',
+      details: err.message,
+      errorCode: err.code,
+    };
+  } catch (error) {
+    logger.error('testEmailConfig: unexpected exception', {
+      message: error?.message,
+      stack: error?.stack,
+    });
+    return {
+      success: false,
+      emailConfigured: false,
+      method: authMethod,
+      error: 'Email check failed',
+      details: error?.message,
     };
   }
 }
