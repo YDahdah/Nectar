@@ -176,8 +176,18 @@ const Checkout = () => {
         notes: '',
       };
 
+      // 60s is generous enough to survive a Render free-tier cold start (~30–50s)
+      // plus the email send (~1–5s). The backend has its own 22s email-send cap
+      // and always responds, so this only kicks in for genuine network stalls.
+      const CHECKOUT_TIMEOUT_MS = 60_000;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
+      const timeout = setTimeout(() => {
+        try {
+          controller.abort(new DOMException("Request timed out", "TimeoutError"));
+        } catch {
+          controller.abort();
+        }
+      }, CHECKOUT_TIMEOUT_MS);
 
       const API_URL = import.meta.env.VITE_API_URL;
       const appsScriptUrl = (import.meta.env?.VITE_GOOGLE_APPS_SCRIPT_ORDER_URL as string | undefined)?.trim();
@@ -185,14 +195,33 @@ const Checkout = () => {
         appsScriptUrl ||
         (API_URL ? `${API_URL.replace(/\/$/, "")}/api/orders/checkout` : buildApiUrl("/orders/checkout"));
 
-      const resp = await fetch(checkoutUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orderData),
-        signal: controller.signal,
-      });
+      let resp: Response;
+      try {
+        resp = await fetch(checkoutUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(orderData),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        if (
+          (fetchErr instanceof DOMException && fetchErr.name === "AbortError") ||
+          (fetchErr instanceof Error && fetchErr.name === "AbortError")
+        ) {
+          throw new Error(
+            "The order request took too long to complete. Please check your connection and try again, or contact us directly.",
+          );
+        }
+        if (fetchErr instanceof TypeError) {
+          throw new Error(
+            "Could not reach the order server. Please check your internet connection and try again.",
+          );
+        }
+        throw fetchErr;
+      }
 
       clearTimeout(timeout);
 

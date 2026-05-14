@@ -97,13 +97,22 @@ function initializeTransporter() {
 
   // Remove any spaces from password (Gmail app passwords sometimes have spaces when copied)
   const cleanPassword = emailPassword.replace(/\s+/g, '');
-  
+
+  // SMTP timeouts: without these, nodemailer can hang indefinitely on a bad/slow
+  // connection (wrong creds, network block, Gmail outage) and stall the entire
+  // /api/orders/checkout request until the frontend abort kicks in.
   transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: emailUser,
-      pass: cleanPassword
-    }
+      pass: cleanPassword,
+    },
+    connectionTimeout: 10_000, // 10s to establish TCP/TLS connection
+    greetingTimeout: 10_000,   // 10s to wait for SMTP greeting
+    socketTimeout: 20_000,     // 20s for data transfer (sending the message)
+    pool: true,                // reuse connections across requests
+    maxConnections: 3,
+    maxMessages: 100,
   });
 
   // Verify transporter connection (async; don't block)
