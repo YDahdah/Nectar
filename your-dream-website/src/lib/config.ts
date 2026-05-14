@@ -1,4 +1,4 @@
-/** Dev: `/api` (Vite proxies to the Node server). Prod: set `VITE_API_BASE_URL` or absolute `VITE_API_URL`. */
+/** Dev: `/api` (Vite proxy). Prod: `VITE_API_URL` in `.env.production` (e.g. Render) or `VITE_API_BASE_URL`. */
 function resolveApiBase(): string {
   const env = typeof import.meta !== "undefined" ? import.meta.env : undefined;
   const fromApiUrl = env?.VITE_API_URL?.trim();
@@ -28,7 +28,7 @@ function resolveApiBase(): string {
   return base;
 }
 
-// Backend API base (relative in dev → Vite `server.proxy` → http://localhost:3000).
+// Backend API base (relative in dev → Vite `server.proxy` → https://nectar-xirj.onrender.com).
 export const API_BASE = resolveApiBase();
 
 // Cloud Function URL for order processing

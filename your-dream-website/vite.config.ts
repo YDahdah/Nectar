@@ -6,7 +6,8 @@ import type { ProxyServer } from "http-proxy";
 import { componentTagger } from "lovable-tagger";
 import { imagetools } from "vite-imagetools";
 
-const API_PROXY_TARGET = process.env.VITE_PROXY_TARGET || "http://localhost:3000";
+const API_PROXY_TARGET =
+  process.env.VITE_PROXY_TARGET || "https://nectar-xirj.onrender.com";
 
 /** When the Node API is down, Vite's proxy used to surface an opaque 500; return JSON instead. */
 function attachApiProxyErrorHandler(proxy: ProxyServer) {
@@ -40,7 +41,7 @@ export default defineConfig(({ mode }) => ({
       strict: true,
       allow: ['..'],
     },
-    // Proxy API requests in dev. Set VITE_PROXY_TARGET to use local backend (e.g. http://localhost:3000).
+    // Proxy API requests in dev. Override VITE_PROXY_TARGET for a local backend (e.g. http://localhost:3000).
     proxy: {
       '/api': {
         target: API_PROXY_TARGET,
