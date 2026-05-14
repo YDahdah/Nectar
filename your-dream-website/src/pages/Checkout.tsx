@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { getImageUrl, buildApiUrl, API_URL } from "@/lib/config";
+import { getImageUrl, buildApiUrl } from "@/lib/config";
 import { validateDeliveryFields } from "@/lib/checkoutValidation";
 
 const CHECKOUT_SAVED_KEY = "nectar_checkout_saved";
@@ -179,11 +179,11 @@ const Checkout = () => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
 
+      const API_URL = import.meta.env.VITE_API_URL;
       const appsScriptUrl = (import.meta.env?.VITE_GOOGLE_APPS_SCRIPT_ORDER_URL as string | undefined)?.trim();
-      // When `VITE_API_URL` is set: `https://host/api/orders/...`. Otherwise same-origin `/api` via `buildApiUrl`.
       const checkoutUrl =
         appsScriptUrl ||
-        (API_URL ? `${API_URL}/api/orders/checkout` : buildApiUrl("/orders/checkout"));
+        (API_URL ? `${API_URL.replace(/\/$/, "")}/api/orders/checkout` : buildApiUrl("/orders/checkout"));
 
       const resp = await fetch(checkoutUrl, {
         method: "POST",
