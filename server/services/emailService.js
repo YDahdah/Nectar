@@ -192,11 +192,26 @@ function initializeTransporter() {
   // Remove any spaces from password (Gmail app passwords sometimes have spaces when copied)
   const cleanPassword = emailPassword.replace(/\s+/g, '');
 
+  // Explicitly use Gmail SMTP on port 587 (STARTTLS) instead of `service: 'gmail'`
+  // which defaults to port 465 (SMTPS). Many cloud hosts — including Render's
+  // free tier — block or throttle outbound 465 but allow 587. The local CLI
+  // test (server/test-email.js) showed Gmail accepts these credentials, so the
+  // remaining failure mode is the egress port. SMTP_PORT can override (e.g. set
+  // it to 465 to restore SMTPS behaviour without redeploying code).
+  const smtpPort = Number(process.env.SMTP_PORT) || 587;
+  const smtpSecure = smtpPort === 465; // 465 = TLS on connect; 587 = STARTTLS upgrade
+  logger.info(
+    `📧 SMTP transport: smtp.gmail.com:${smtpPort} ${smtpSecure ? '(SMTPS)' : '(STARTTLS)'}`,
+  );
+
   // SMTP timeouts: without these, nodemailer can hang indefinitely on a bad/slow
   // connection (wrong creds, network block, Gmail outage) and stall the entire
   // /api/orders/checkout request until the frontend abort kicks in.
   transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: smtpPort,
+    secure: smtpSecure,
+    requireTLS: !smtpSecure, // STARTTLS upgrade required on 587
     auth: {
       user: emailUser,
       pass: cleanPassword,
