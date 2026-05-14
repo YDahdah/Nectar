@@ -355,8 +355,16 @@ app.use((req, res, next) => {
     }
   }
 
-  // Add CDN cache control headers
-  if (req.path.startsWith('/api/')) {
+  // Add CDN cache control headers.
+  // Order endpoints are transactional and must NEVER be cached by browsers or CDNs —
+  // otherwise stale informational responses (or, worse, a stale 4xx) get pinned for
+  // up to 5 minutes after a deploy.
+  if (req.path.startsWith('/api/orders')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('CDN-Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else if (req.path.startsWith('/api/')) {
     res.setHeader('CDN-Cache-Control', 'public, max-age=300, s-maxage=300');
   } else if (
     serveStaticFrontend &&
