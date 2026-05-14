@@ -1,15 +1,21 @@
 import { sendOwnerOrderNotification } from '../services/emailService.js';
 import logger from '../utils/logger.js';
-import { ApiError } from '../middleware/errorHandler.js';
 import { generateOrderId, calculateOrderTotal } from '../utils/helpers.js';
 
 /**
- * Checkout: notify owner by email only (no database).
- * Each request is independent—many users can check out at once without shared DB contention.
+ * Checkout handler — email only, no persistence.
+ *
+ * Flow:
+ *   1. Receive validated order payload from the frontend (req.body).
+ *   2. Generate a one-off orderId and compute total.
+ *   3. Email the order to OWNER_EMAIL / ORDER_EMAIL (resolved inside emailService).
+ *   4. Respond with { success: true, orderId, total }.
+ *
+ * No database, MongoDB, Supabase, Redis, or Google Sheets is required or used.
  */
 export const createOrder = async (req, res, next) => {
   try {
-    const body = req.body;
+    const body = req.body || {};
     const orderId = generateOrderId();
     const shippingCost = Number(body.shippingCost) || 0;
     const total = calculateOrderTotal(body.items, shippingCost);
@@ -25,15 +31,11 @@ export const createOrder = async (req, res, next) => {
       result = await sendOwnerOrderNotification(orderForEmail);
     } catch (emailErr) {
       // eslint-disable-next-line no-console
-      console.error('[orderController] ❌ Owner email FAILED:');
-      // eslint-disable-next-line no-console
-      console.error('  Message:', emailErr.message);
-      // eslint-disable-next-line no-console
-      console.error('  Code:', emailErr.code);
-      // eslint-disable-next-line no-console
-      console.error('  Response:', emailErr.response);
-      // eslint-disable-next-line no-console
-      console.error('  Stack:', emailErr.stack);
+      console.error('[orderController] Owner email threw:', {
+        message: emailErr.message,
+        code: emailErr.code,
+        response: emailErr.response,
+      });
       logger.error('Owner order email threw', {
         orderId,
         message: emailErr.message,
@@ -50,22 +52,16 @@ export const createOrder = async (req, res, next) => {
       });
     }
 
-    if (!result.success) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[orderController] Owner email failed:',
-        result.error,
-        result.errorCode || '',
-      );
+    if (!result || !result.success) {
       logger.warn('Owner order email was not sent', {
         orderId,
-        error: result.error,
-        errorCode: result.errorCode,
+        error: result?.error,
+        errorCode: result?.errorCode,
       });
       return res.status(502).json({
         success: false,
         message:
-          result.error ||
+          result?.error ||
           'We could not send your order notification. Please try again in a moment or contact us by phone.',
         orderId,
       });
@@ -81,33 +77,3 @@ export const createOrder = async (req, res, next) => {
     next(err);
   }
 };
-
-/**
- * Get order by ID
- * Note: No order persistence — lookup is not available without a database.
- * We still validate the id format so reserved paths (e.g. /checkout) can't
- * silently match this handler if route ordering ever regresses.
- */
-export async function getOrderById(req, res, next) {
-  try {
-    const { orderId } = req.params;
-    if (!/^ORD-\d+-\d+$/.test(String(orderId || ''))) {
-      throw new ApiError(404, 'Order not found.');
-    }
-    throw new ApiError(503, 'Order lookup is not available without order storage.');
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * Get all orders (with pagination)
- * Note: No order persistence — listing is not available without a database.
- */
-export async function getAllOrders(req, res, next) {
-  try {
-    throw new ApiError(503, 'Order listing is not available without order storage.');
-  } catch (error) {
-    next(error);
-  }
-}
