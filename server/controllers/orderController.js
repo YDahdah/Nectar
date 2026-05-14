@@ -85,9 +85,15 @@ export const createOrder = async (req, res, next) => {
 /**
  * Get order by ID
  * Note: No order persistence — lookup is not available without a database.
+ * We still validate the id format so reserved paths (e.g. /checkout) can't
+ * silently match this handler if route ordering ever regresses.
  */
 export async function getOrderById(req, res, next) {
   try {
+    const { orderId } = req.params;
+    if (!/^ORD-\d+-\d+$/.test(String(orderId || ''))) {
+      throw new ApiError(404, 'Order not found.');
+    }
     throw new ApiError(503, 'Order lookup is not available without order storage.');
   } catch (error) {
     next(error);
