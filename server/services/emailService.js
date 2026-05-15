@@ -37,31 +37,55 @@ function isResendConfigured() {
 }
 
 async function sendViaResend({ to, subject, html }) {
-  try {
-    // eslint-disable-next-line no-console
-    console.log("[Resend] Starting send", { to, subject });
+  // eslint-disable-next-line no-console
+  console.log("[Resend] sendViaResend entered");
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 7000);
+  try {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESEND_FROM_EMAIL || "Nectar Perfume <onboarding@resend.dev>";
+
+    if (!apiKey) {
+      // eslint-disable-next-line no-console
+      console.error("[Resend] Missing RESEND_API_KEY");
+      return { success: false, error: "Missing RESEND_API_KEY" };
+    }
+
+    if (!to) {
+      // eslint-disable-next-line no-console
+      console.error("[Resend] Missing recipient");
+      return { success: false, error: "Missing recipient" };
+    }
+
+    const payload = {
+      from,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html
+    };
+
+    // eslint-disable-next-line no-console
+    console.log("[Resend] About to fetch", {
+      from: payload.from,
+      to: payload.to,
+      subject: payload.subject
+    });
 
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      signal: controller.signal,
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
+        Authorization: "Bearer " + apiKey,
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || "Nectar Perfume <onboarding@resend.dev>",
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html,
-      }),
+      body: JSON.stringify(payload)
     });
 
-    clearTimeout(timeout);
+    // eslint-disable-next-line no-console
+    console.log("[Resend] Fetch completed", response.status);
 
     const text = await response.text();
+    // eslint-disable-next-line no-console
+    console.log("[Resend] Raw response:", text);
+
     let data;
     try {
       data = JSON.parse(text);
@@ -71,21 +95,21 @@ async function sendViaResend({ to, subject, html }) {
 
     if (!response.ok) {
       // eslint-disable-next-line no-console
-      console.error("[Resend] Failed", response.status, data);
-      return { success: false, status: response.status, error: data };
+      console.error("[Resend] API failed", data);
+      return { success: false, error: data };
     }
 
     // eslint-disable-next-line no-console
-    console.log("[Resend] Success", data);
+    console.log("[Resend] API success", data);
     return { success: true, data };
-  } catch (error) {
+  } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("[Resend] Exception", {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
+    console.error("[Resend] Caught exception", {
+      name: err && err.name,
+      message: err && err.message,
+      stack: err && err.stack
     });
-    return { success: false, error: error.message };
+    return { success: false, error: err && err.message ? err.message : String(err) };
   }
 }
 
@@ -1123,68 +1147,19 @@ export async function sendOwnerOrderNotification(order) {
       `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
     const subject = `🛍️ New Order from ${clientNameEarly} (${clientEmailEarly}) — ${orderId || 'Order'}`;
     const html = formatOrderEmailHTML(order, orderId);
-    const textBody = formatOrderEmailText(order, orderId);
-    const replyToEmail =
-      clientEmailEarly !== 'No email provided' && clientEmailEarly ? clientEmailEarly : undefined;
 
-    // When RESEND_API_KEY is set, Resend is the ONLY transport we use.
-    // No Gmail SMTP fallback in production — outbound SMTP is blocked on Render
-    // free tier and just stalls the worker until the platform kills it.
-    if (isResendConfigured()) {
-      // eslint-disable-next-line no-console
-      console.log('Sending owner email via Resend...');
-      return await sendViaResend({ to: process.env.OWNER_EMAIL || process.env.ORDER_EMAIL, subject, html });
-    }
-
-    // Fallback path: Gmail SMTP. Only reached when RESEND_API_KEY is NOT set.
-    const emailTransporter = initializeTransporter();
-
-    if (!emailTransporter) {
-      logger.error('❌ Email transporter not initialized. Owner notification will not be sent.');
-      return { success: false, error: 'Email transporter not configured' };
-    }
-
-    const emailUser = config.email.user;
-
-    const mailOptions = {
-      from: `"${config.email.shopName || 'Nectar Shop'}" <${emailUser}>`,
-      replyTo: replyToEmail || emailUser,
-      to: recipientEmail,
+    // Resend HTTP API only. No Gmail SMTP fallback in production — outbound SMTP
+    // is blocked on Render's free tier and stalls the worker until it's killed.
+    // eslint-disable-next-line no-console
+    console.log("Sending owner email via Resend...");
+    const result = await sendViaResend({
+      to: process.env.OWNER_EMAIL || process.env.ORDER_EMAIL,
       subject,
-      text: textBody,
-      html,
-      headers: {
-        'X-Client-Email': clientEmailEarly,
-        'X-Client-Name': clientNameEarly,
-        'X-Order-ID': orderId || 'N/A',
-      },
-    };
-
-    try {
-      logger.info(`📧 Sending owner order notification via SMTP:`);
-      logger.info(`   From: ${emailUser}`);
-      logger.info(`   To: ${recipientEmail}`);
-
-      const info = await emailTransporter.sendMail(mailOptions);
-
-      logger.info(`✅ Owner notification sent to ${recipientEmail}`);
-      logger.info(`   Message ID: ${info.messageId}`);
-
-      if (info.rejected && info.rejected.length > 0) {
-        return {
-          success: false,
-          error: `Email rejected: ${info.rejected.join(', ')}`,
-        };
-      }
-
-      return { success: true, id: info.messageId, recipient: recipientEmail };
-    } catch (error) {
-      logger.error('❌ Owner notification email error:', {
-        message: error.message,
-        code: error.code,
-      });
-      return { success: false, error: error.message };
-    }
+      html
+    });
+    // eslint-disable-next-line no-console
+    console.log("Owner email result:", result);
+    return result;
   } catch (err) {
     // Last-resort catch-all so the function ALWAYS resolves to a result object.
     // eslint-disable-next-line no-console
