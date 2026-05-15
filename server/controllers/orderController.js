@@ -5,84 +5,88 @@ import {
 import logger from '../utils/logger.js';
 import { generateOrderId, calculateOrderTotal } from '../utils/helpers.js';
 
-// Hard cap for the email-send step. Must be smaller than the frontend's
-// fetch timeout (60s) so the server always replies first.
-const EMAIL_SEND_TIMEOUT_MS = 22_000;
+/**
+ * Fires both order emails in the background, AFTER the HTTP response has been
+ * sent. Both send functions are guaranteed not to throw (they always resolve
+ * to `{ success, ... }`), but we still wrap with .catch() so that even an
+ * unexpected synchronous throw can never bubble up to the Node event loop and
+ * crash the process — which is what was causing Render to restart the worker
+ * mid-request and turn a ~10s checkout into a hard outage.
+ */
+function fireOrderEmailsInBackground(orderForEmail, orderId) {
+  setImmediate(() => {
+    Promise.resolve()
+      .then(async () => {
+        const ownerResult = await sendOwnerOrderNotification(orderForEmail).catch((err) => ({
+          success: false,
+          error: err?.message || 'sendOwnerOrderNotification threw',
+        }));
 
-function withTimeout(promise, ms, label) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      resolve({ __timedOut: true, label });
-    }, ms);
-    Promise.resolve(promise)
-      .then((value) => {
-        clearTimeout(timer);
-        resolve(value);
+        if (ownerResult?.success) {
+          logger.info('[background] Owner email delivered', {
+            orderId,
+            id: ownerResult.id,
+            recipient: ownerResult.recipient,
+          });
+          // eslint-disable-next-line no-console
+          console.log('[background] Owner email delivered for', orderId, '→', ownerResult.id);
+        } else {
+          logger.warn('[background] Owner email failed', {
+            orderId,
+            error: ownerResult?.error,
+          });
+          // eslint-disable-next-line no-console
+          console.log('[background] Owner email failed for', orderId, '→', ownerResult?.error);
+        }
+
+        const customerResult = await sendCustomerConfirmationEmail(orderForEmail, orderId).catch(
+          (err) => ({
+            success: false,
+            error: err?.message || 'sendCustomerConfirmationEmail threw',
+          }),
+        );
+
+        if (customerResult?.success) {
+          logger.info('[background] Customer email delivered', {
+            orderId,
+            id: customerResult.id,
+            recipient: customerResult.recipient,
+          });
+          // eslint-disable-next-line no-console
+          console.log('[background] Customer email delivered for', orderId, '→', customerResult.id);
+        } else {
+          logger.warn('[background] Customer email failed', {
+            orderId,
+            error: customerResult?.error,
+          });
+          // eslint-disable-next-line no-console
+          console.log('[background] Customer email failed for', orderId, '→', customerResult?.error);
+        }
       })
-      .catch((error) => {
-        clearTimeout(timer);
-        resolve({ __error: error });
+      .catch((err) => {
+        // Defensive: should never get here because both senders are wrapped
+        // with .catch() above. Log and swallow so the process stays alive.
+        logger.error('[background] Unexpected exception in email pipeline', {
+          orderId,
+          message: err?.message,
+          stack: err?.stack,
+        });
+        // eslint-disable-next-line no-console
+        console.log('[background] Unexpected exception:', err?.message);
       });
   });
 }
 
-// Log the customer-confirmation outcome without ever affecting the HTTP response.
-// Customer confirmation is best-effort: failure here is normal when the Resend
-// sandbox sender is used (it only delivers to the Resend account owner), or
-// when no domain is verified yet. The order is already considered successful
-// once the owner notification path has completed.
-function logCustomerEmailOutcome(orderId, outcome) {
-  if (!outcome) return;
-  if (outcome.__timedOut) {
-    logger.warn('Customer confirmation email timed out — owner already notified', {
-      orderId,
-      timeoutMs: EMAIL_SEND_TIMEOUT_MS,
-    });
-    return;
-  }
-  if (outcome.__error) {
-    logger.warn('Customer confirmation email threw — owner already notified', {
-      orderId,
-      message: outcome.__error.message,
-      code: outcome.__error.code,
-    });
-    return;
-  }
-  if (!outcome.success) {
-    logger.warn('Customer confirmation email reported failure', {
-      orderId,
-      error: outcome.error,
-      errorCode: outcome.errorCode,
-    });
-    return;
-  }
-  logger.info('Customer confirmation email delivered', {
-    orderId,
-    recipient: outcome.recipient,
-    messageId: outcome.messageId,
-  });
-}
-
 /**
- * Checkout handler — email only, no persistence.
+ * Checkout handler — accepts the order, responds 201 immediately, then fires
+ * both notification emails in the background.
  *
- * Flow:
- *   1. Receive validated order payload from the frontend (req.body).
- *   2. Generate a one-off orderId and compute total.
- *   3. In parallel, send two emails (each capped at EMAIL_SEND_TIMEOUT_MS):
- *        a. Owner notification — to OWNER_EMAIL / ORDER_EMAIL (resolved inside
- *           emailService). This is the email the operator depends on, so its
- *           outcome drives the `emailDelivered` flag on the response.
- *        b. Customer confirmation — to the buyer's email. Best-effort: its
- *           outcome is only logged and never affects the HTTP response. This
- *           failure is normal until a domain is verified in Resend
- *           (the sandbox sender can't reach arbitrary recipients).
- *   4. Respond with { success: true, orderId, total, emailDelivered }. If the
- *      owner email failed/timed out we still respond success (the customer
- *      must not retry and create duplicates) AND log the full order so the
- *      operator can recover it from logs.
- *
- * No database, MongoDB, Supabase, Redis, or Google Sheets is required or used.
+ * Why the response can't await emails:
+ *   On Render's free tier, awaiting email sends inside the request handler
+ *   was making POST /api/orders/checkout take ~10s, and any rare email-pipeline
+ *   exception was crashing the worker so Render would restart it mid-request.
+ *   By replying first and using `setImmediate`, the HTTP response is always
+ *   fast and email failures only ever show up in logs.
  */
 export const createOrder = async (req, res, next) => {
   try {
@@ -97,97 +101,17 @@ export const createOrder = async (req, res, next) => {
       totalPrice: total,
     };
 
-    // Fire both emails in parallel. The owner notification governs the response
-    // (it's the one the operator depends on). The customer confirmation is
-    // best-effort and is never allowed to affect `emailDelivered` or the
-    // status code — it just gets logged.
-    const [outcome, customerOutcome] = await Promise.all([
-      withTimeout(
-        sendOwnerOrderNotification(orderForEmail),
-        EMAIL_SEND_TIMEOUT_MS,
-        'owner-email',
-      ),
-      withTimeout(
-        sendCustomerConfirmationEmail(orderForEmail, orderId),
-        EMAIL_SEND_TIMEOUT_MS,
-        'customer-email',
-      ),
-    ]);
+    logger.info('Order accepted (responding before sending emails)', { orderId, total });
 
-    logCustomerEmailOutcome(orderId, customerOutcome);
-
-    if (outcome && outcome.__timedOut) {
-      logger.error('Owner order email timed out — order accepted but not yet delivered', {
-        orderId,
-        timeoutMs: EMAIL_SEND_TIMEOUT_MS,
-        order: orderForEmail,
-      });
-      // eslint-disable-next-line no-console
-      console.error(
-        `[orderController] Owner email TIMED OUT after ${EMAIL_SEND_TIMEOUT_MS}ms — order ${orderId} preserved in logs.`,
-      );
-      return res.status(201).json({
-        success: true,
-        message:
-          'Order received. Email delivery is taking longer than usual — the shop will contact you shortly.',
-        orderId,
-        total,
-        emailDelivered: false,
-      });
-    }
-
-    if (outcome && outcome.__error) {
-      const emailErr = outcome.__error;
-      logger.error('Owner order email threw — order preserved in logs', {
-        orderId,
-        message: emailErr.message,
-        code: emailErr.code,
-        response: emailErr.response,
-        stack: emailErr.stack,
-        order: orderForEmail,
-      });
-      // eslint-disable-next-line no-console
-      console.error('[orderController] Owner email THREW — order preserved in logs:', {
-        orderId,
-        message: emailErr.message,
-        code: emailErr.code,
-      });
-      return res.status(201).json({
-        success: true,
-        message:
-          'Order received. There was an issue delivering the notification email — the shop will contact you shortly.',
-        orderId,
-        total,
-        emailDelivered: false,
-      });
-    }
-
-    const result = outcome;
-    if (!result || !result.success) {
-      logger.warn('Owner order email reported failure — order preserved in logs', {
-        orderId,
-        error: result?.error,
-        errorCode: result?.errorCode,
-        order: orderForEmail,
-      });
-      return res.status(201).json({
-        success: true,
-        message:
-          'Order received. There was an issue delivering the notification email — the shop will contact you shortly.',
-        orderId,
-        total,
-        emailDelivered: false,
-      });
-    }
-
-    logger.info('Order accepted and owner notified', { orderId, total });
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      message: 'Order received. The shop owner has been notified by email.',
+      message: 'Order received. The shop will follow up via WhatsApp and email shortly.',
       orderId,
       total,
-      emailDelivered: true,
+      emailDelivered: 'pending',
     });
+
+    fireOrderEmailsInBackground(orderForEmail, orderId);
   } catch (err) {
     next(err);
   }

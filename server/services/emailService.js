@@ -180,22 +180,24 @@ export async function verifyEmailConfig({ timeoutMs = 8000 } = {}) {
 
   const resendConfigured = isResendConfigured();
 
+  // When Resend is configured, we deliberately skip transporter.verify() —
+  // Resend is the only transport we will use, and probing Gmail SMTP on Render
+  // tends to hang for the full timeout (port 587/465 are blocked outbound).
+  if (resendConfigured) {
+    return {
+      success: true,
+      emailConfigured: true,
+      primaryTransport: 'resend',
+      smtp: { available: false, reason: 'Gmail SMTP disabled (RESEND_API_KEY set)' },
+      resend: { configured: true },
+      env,
+      message: 'Resend HTTP API configured; Gmail SMTP fallback disabled',
+    };
+  }
+
   try {
     const t = initializeTransporter();
     if (!t) {
-      if (resendConfigured) {
-        // Resend is the only available transport, but we can't really verify
-        // it without sending an email or making an authenticated probe. Report
-        // it as the primary, partially-verified path.
-        return {
-          success: true,
-          emailConfigured: true,
-          primaryTransport: 'resend',
-          smtp: { available: false, reason: 'EMAIL_USER / EMAIL_PASSWORD not set (Gmail SMTP disabled)' },
-          env,
-          message: 'Resend HTTP API configured; Gmail SMTP fallback not configured',
-        };
-      }
       return {
         success: false,
         emailConfigured: false,
@@ -375,23 +377,29 @@ function initializeTransporter() {
     maxMessages: 100,
   });
 
-  // Verify transporter connection (async; don't block)
-  transporter.verify(function (error, success) {
-    if (error) {
-      if (error.code === 'EAUTH') {
-        logger.error('⚠️ Gmail authentication failed!');
-        logger.error('   Check your EMAIL_USER and EMAIL_PASSWORD in server/.env');
-        logger.error('   EMAIL_PASSWORD must be a Gmail App Password (not your regular password)');
-        logger.error('   Create one at: https://myaccount.google.com/apppasswords');
-        logger.error('   Error details:', error.message);
+  // Verify transporter connection (async; don't block).
+  // Skipped entirely when Resend is configured — on hosts like Render that
+  // block outbound SMTP, this verify call hangs and burns the request budget.
+  if (!isResendConfigured()) {
+    transporter.verify(function (error, success) {
+      if (error) {
+        if (error.code === 'EAUTH') {
+          logger.error('⚠️ Gmail authentication failed!');
+          logger.error('   Check your EMAIL_USER and EMAIL_PASSWORD in server/.env');
+          logger.error('   EMAIL_PASSWORD must be a Gmail App Password (not your regular password)');
+          logger.error('   Create one at: https://myaccount.google.com/apppasswords');
+          logger.error('   Error details:', error.message);
+        } else {
+          logger.error('❌ Email transporter verification failed:', error.message);
+        }
       } else {
-        logger.error('❌ Email transporter verification failed:', error.message);
+        logger.info('✅ Email transporter verified successfully');
+        logger.info(`   Ready to send emails from: ${emailUser}`);
       }
-    } else {
-      logger.info('✅ Email transporter verified successfully');
-      logger.info(`   Ready to send emails from: ${emailUser}`);
-    }
-  });
+    });
+  } else {
+    logger.info('ℹ️ Skipping transporter.verify() because RESEND_API_KEY is set (Resend is the only transport).');
+  }
 
   return transporter;
 }
@@ -988,135 +996,142 @@ function formatCustomerConfirmationEmailText(orderData, orderId = null) {
  *   2. Gmail SMTP fallback — only works on hosts that allow outbound SMTP.
  */
 export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
-  let customerEmail = orderData?.email;
-  const customerName = `${orderData?.firstName || ''} ${orderData?.lastName || ''}`.trim();
-
-  if (!customerEmail) {
-    logger.warn('⚠️ Customer email not provided. Skipping customer confirmation email.');
-    return {
-      success: false,
-      error: 'Customer email not provided',
-      method: 'email',
-    };
-  }
-
-  customerEmail = customerEmail.trim().toLowerCase();
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(customerEmail)) {
-    logger.error(`❌ Invalid email address format: ${customerEmail}`);
-    return {
-      success: false,
-      error: `Invalid email address format: ${customerEmail}`,
-      method: 'email',
-    };
-  }
-
-  const invalidDomains = ['example.com', 'test.com', 'example.org', 'test.org', 'example.net'];
-  const emailDomain = customerEmail.split('@')[1];
-  if (invalidDomains.includes(emailDomain)) {
-    logger.error(`❌ Invalid email domain (placeholder/test domain): ${customerEmail}`);
-    return {
-      success: false,
-      error: `Please use a real email address. ${emailDomain} is a test domain that doesn't accept email.`,
-      method: 'email',
-    };
-  }
-
-  logger.info(`📧 Preparing to send confirmation email to customer: ${customerEmail}`);
-
-  const subject = `✨ Order Confirmation - ${orderId || 'Your Order'}`;
-  const htmlBody = formatCustomerConfirmationEmailHTML(orderData, orderId);
-  const textBody = formatCustomerConfirmationEmailText(orderData, orderId);
-
-  // Prefer Resend whenever it's configured. Required on hosts that block
-  // outbound SMTP (e.g. Render free tier).
-  if (isResendConfigured()) {
-    logger.info('📧 Customer confirmation: trying Resend HTTP API first');
-    const resendResult = await sendViaResend({
-      to: customerEmail,
-      subject,
-      html: htmlBody,
-      text: textBody,
-    });
-    if (resendResult.success) {
-      return { ...resendResult, recipient: customerEmail };
-    }
-    logger.warn('⚠️ Resend failed for customer email, falling back to Gmail SMTP', {
-      error: resendResult.error,
-      errorCode: resendResult.errorCode,
-    });
-  }
-
-  const emailTransporter = initializeTransporter();
-
-  if (!emailTransporter) {
-    logger.warn('⚠️ Email transporter not initialized. Customer confirmation email will not be sent.');
-    return {
-      success: false,
-      error: 'Email transporter not configured',
-      method: 'email',
-    };
-  }
-
-  const emailUser = config.email.user;
-  const shopName = config.email.shopName;
-
-  const mailOptions = {
-    from: `"${shopName}" <${emailUser}>`,
-    replyTo: emailUser,
-    to: customerEmail,
-    subject,
-    text: textBody,
-    html: htmlBody,
-    headers: {
-      'X-Customer-Name': customerName,
-      'X-Order-ID': orderId || 'N/A',
-      'List-Unsubscribe': `<mailto:${emailUser}?subject=Unsubscribe>`,
-    },
-  };
-
+  // Hard guarantee: this function never throws. Always returns
+  //   { success: true, id }  OR  { success: false, error }
+  // so the caller can safely run it in a background `setImmediate` without
+  // risking an uncaughtException that would let Render restart the process.
   try {
-    logger.info(`📧 Attempting to send customer email via SMTP:`);
-    logger.info(`   From: ${emailUser}`);
-    logger.info(`   To: ${customerEmail}`);
-    logger.info(`   Subject: ${mailOptions.subject}`);
+    let customerEmail = orderData?.email;
+    const customerName = `${orderData?.firstName || ''} ${orderData?.lastName || ''}`.trim();
 
-    const info = await emailTransporter.sendMail(mailOptions);
+    if (!customerEmail) {
+      logger.warn('⚠️ Customer email not provided. Skipping customer confirmation email.');
+      return { success: false, error: 'Customer email not provided' };
+    }
 
-    logger.info(`✅ Customer confirmation email sent successfully to ${customerEmail}`);
-    logger.info(`   Message ID: ${info.messageId}`);
-    logger.info(`   Response: ${info.response}`);
+    customerEmail = customerEmail.trim().toLowerCase();
 
-    if (info.rejected && info.rejected.length > 0) {
-      logger.error(`⚠️ Email was rejected by server: ${info.rejected.join(', ')}`);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(customerEmail)) {
+      logger.error(`❌ Invalid email address format: ${customerEmail}`);
+      return { success: false, error: `Invalid email address format: ${customerEmail}` };
+    }
+
+    const invalidDomains = ['example.com', 'test.com', 'example.org', 'test.org', 'example.net'];
+    const emailDomain = customerEmail.split('@')[1];
+    if (invalidDomains.includes(emailDomain)) {
+      logger.error(`❌ Invalid email domain (placeholder/test domain): ${customerEmail}`);
       return {
         success: false,
-        error: `Email rejected: ${info.rejected.join(', ')}`,
-        method: 'email',
-        recipient: customerEmail,
+        error: `Please use a real email address. ${emailDomain} is a test domain that doesn't accept email.`,
       };
     }
 
-    return {
-      success: true,
-      messageId: info.messageId,
-      method: 'email',
-      recipient: customerEmail,
-    };
-  } catch (error) {
-    if (error.code === 'EAUTH') {
-      logger.warn('⚠️ Gmail login failed. Set EMAIL_PASSWORD in server/.env to a Gmail App Password: https://myaccount.google.com/apppasswords');
-    } else {
-      logger.error('❌ Failed to send customer confirmation email:', error.message);
+    logger.info(`📧 Preparing to send confirmation email to customer: ${customerEmail}`);
+
+    const subject = `✨ Order Confirmation - ${orderId || 'Your Order'}`;
+    const htmlBody = formatCustomerConfirmationEmailHTML(orderData, orderId);
+    const textBody = formatCustomerConfirmationEmailText(orderData, orderId);
+
+    // When RESEND_API_KEY is set, Resend is the ONLY transport we use.
+    // No Gmail SMTP fallback — on Render free tier outbound SMTP is blocked,
+    // and trying it just stalls the worker until the platform kills it.
+    if (isResendConfigured()) {
+      // eslint-disable-next-line no-console
+      console.log('Sending customer email via Resend...');
+      let resendResult;
+      try {
+        resendResult = await sendViaResend({
+          to: customerEmail,
+          subject,
+          html: htmlBody,
+          text: textBody,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.log('Customer email failed:', err?.message);
+        return { success: false, error: err?.message || 'Resend send threw' };
+      }
+
+      // eslint-disable-next-line no-console
+      console.log('Customer email sent/resend response:', {
+        success: resendResult?.success,
+        id: resendResult?.messageId,
+        error: resendResult?.error,
+      });
+
+      if (resendResult?.success) {
+        return { success: true, id: resendResult.messageId, recipient: customerEmail };
+      }
+      // eslint-disable-next-line no-console
+      console.log('Customer email failed:', resendResult?.error);
+      return { success: false, error: resendResult?.error || 'Resend send failed' };
     }
-    return {
-      success: false,
-      error: error.message,
-      errorCode: error.code,
-      method: 'email',
-      recipient: customerEmail,
+
+    // Fallback path: Gmail SMTP. Only reached when RESEND_API_KEY is NOT set
+    // (i.e. local dev without Resend). Production should always have Resend.
+    const emailTransporter = initializeTransporter();
+
+    if (!emailTransporter) {
+      logger.warn('⚠️ Email transporter not initialized. Customer confirmation email will not be sent.');
+      return { success: false, error: 'Email transporter not configured' };
+    }
+
+    const emailUser = config.email.user;
+    const shopName = config.email.shopName;
+
+    const mailOptions = {
+      from: `"${shopName}" <${emailUser}>`,
+      replyTo: emailUser,
+      to: customerEmail,
+      subject,
+      text: textBody,
+      html: htmlBody,
+      headers: {
+        'X-Customer-Name': customerName,
+        'X-Order-ID': orderId || 'N/A',
+        'List-Unsubscribe': `<mailto:${emailUser}?subject=Unsubscribe>`,
+      },
     };
+
+    try {
+      logger.info(`📧 Attempting to send customer email via SMTP:`);
+      logger.info(`   From: ${emailUser}`);
+      logger.info(`   To: ${customerEmail}`);
+      logger.info(`   Subject: ${mailOptions.subject}`);
+
+      const info = await emailTransporter.sendMail(mailOptions);
+
+      logger.info(`✅ Customer confirmation email sent successfully to ${customerEmail}`);
+      logger.info(`   Message ID: ${info.messageId}`);
+      logger.info(`   Response: ${info.response}`);
+
+      if (info.rejected && info.rejected.length > 0) {
+        logger.error(`⚠️ Email was rejected by server: ${info.rejected.join(', ')}`);
+        return {
+          success: false,
+          error: `Email rejected: ${info.rejected.join(', ')}`,
+        };
+      }
+
+      return { success: true, id: info.messageId, recipient: customerEmail };
+    } catch (error) {
+      if (error.code === 'EAUTH') {
+        logger.warn('⚠️ Gmail login failed. Set EMAIL_PASSWORD in server/.env to a Gmail App Password.');
+      } else {
+        logger.error('❌ Failed to send customer confirmation email:', error.message);
+      }
+      return { success: false, error: error.message };
+    }
+  } catch (err) {
+    // Last-resort catch-all so the function ALWAYS resolves to a result object.
+    // eslint-disable-next-line no-console
+    console.log('Customer email failed:', err?.message);
+    logger.error('❌ Unexpected exception in sendCustomerConfirmationEmail', {
+      message: err?.message,
+      stack: err?.stack,
+    });
+    return { success: false, error: err?.message || 'Unknown error' };
   }
 }
 
@@ -1138,160 +1153,133 @@ function resolveOwnerNotificationEmail() {
  * @param {Object} order - Full order payload (customer fields, items, totals). Use `orderId` on the object or pass via legacy sendOrderEmail(orderData, id).
  */
 export async function sendOwnerOrderNotification(order) {
-  const orderId = order?.orderId ?? null;
+  // Hard guarantee: this function never throws. Always returns
+  //   { success: true, id }  OR  { success: false, error }
+  // The orderController fires this in `setImmediate` AFTER responding to the
+  // client, so any unhandled rejection here would crash the Node process and
+  // make Render restart the worker mid-request. The outer try/catch prevents that.
+  try {
+    const orderId = order?.orderId ?? null;
 
-  logger.info('📧 sendOwnerOrderNotification called');
-  logger.info(`   Order ID: ${orderId || 'N/A'}`);
-  logger.info(`   Order data type: ${typeof order}`);
-  logger.info(`   Order data keys: ${order ? Object.keys(order).join(', ') : 'null/undefined'}`);
-  logger.info(`   Has firstName: ${!!order?.firstName}`);
-  logger.info(`   Has lastName: ${!!order?.lastName}`);
-  logger.info(`   Has email: ${!!order?.email}`);
-  logger.info(`   Has items: ${!!order?.items}`);
+    logger.info('📧 sendOwnerOrderNotification called');
+    logger.info(`   Order ID: ${orderId || 'N/A'}`);
 
-  if (!order || typeof order !== 'object') {
-    logger.error('❌ sendOwnerOrderNotification: order is missing or invalid');
-    return {
-      success: false,
-      error: 'Order data is missing',
-      method: 'email',
-    };
-  }
+    if (!order || typeof order !== 'object') {
+      logger.error('❌ sendOwnerOrderNotification: order is missing or invalid');
+      return { success: false, error: 'Order data is missing' };
+    }
 
-  const recipientEmail = resolveOwnerNotificationEmail();
-  if (!recipientEmail || !recipientEmail.includes('@')) {
-    logger.warn(
-      '⚠️ OWNER_EMAIL / ORDER_EMAIL / order inbox not configured. Owner order email skipped. Set OWNER_EMAIL in server/.env',
-    );
-    return {
-      success: false,
-      error: 'Owner email not configured',
-      method: 'email',
-    };
-  }
+    const recipientEmail = resolveOwnerNotificationEmail();
+    if (!recipientEmail || !recipientEmail.includes('@')) {
+      logger.warn(
+        '⚠️ OWNER_EMAIL / ORDER_EMAIL / order inbox not configured. Owner order email skipped.',
+      );
+      return { success: false, error: 'Owner email not configured' };
+    }
 
-  const clientEmailEarly = order.email || 'No email provided';
-  const clientNameEarly =
-    `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
-  const subject = `🛍️ New Order from ${clientNameEarly} (${clientEmailEarly}) — ${orderId || 'Order'}`;
-  const htmlBody = formatOrderEmailHTML(order, orderId);
-  const textBody = formatOrderEmailText(order, orderId);
-  const replyToEmail =
-    clientEmailEarly !== 'No email provided' && clientEmailEarly ? clientEmailEarly : undefined;
+    const clientEmailEarly = order.email || 'No email provided';
+    const clientNameEarly =
+      `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
+    const subject = `🛍️ New Order from ${clientNameEarly} (${clientEmailEarly}) — ${orderId || 'Order'}`;
+    const htmlBody = formatOrderEmailHTML(order, orderId);
+    const textBody = formatOrderEmailText(order, orderId);
+    const replyToEmail =
+      clientEmailEarly !== 'No email provided' && clientEmailEarly ? clientEmailEarly : undefined;
 
-  // Prefer Resend whenever it's configured. On hosts that block outbound SMTP
-  // (e.g. Render's free tier) this is the only path that actually delivers.
-  if (isResendConfigured()) {
-    logger.info('📧 Owner notification: trying Resend HTTP API first');
-    const resendResult = await sendViaResend({
+    // When RESEND_API_KEY is set, Resend is the ONLY transport we use.
+    // No Gmail SMTP fallback in production — outbound SMTP is blocked on Render
+    // free tier and just stalls the worker until the platform kills it.
+    if (isResendConfigured()) {
+      // eslint-disable-next-line no-console
+      console.log('Sending owner email via Resend...');
+      let resendResult;
+      try {
+        resendResult = await sendViaResend({
+          to: recipientEmail,
+          subject,
+          html: htmlBody,
+          text: textBody,
+          replyTo: replyToEmail,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.log('Owner email failed:', err?.message);
+        return { success: false, error: err?.message || 'Resend send threw' };
+      }
+
+      // eslint-disable-next-line no-console
+      console.log('Owner email sent/resend response:', {
+        success: resendResult?.success,
+        id: resendResult?.messageId,
+        error: resendResult?.error,
+      });
+
+      if (resendResult?.success) {
+        return { success: true, id: resendResult.messageId, recipient: recipientEmail };
+      }
+      // eslint-disable-next-line no-console
+      console.log('Owner email failed:', resendResult?.error);
+      return { success: false, error: resendResult?.error || 'Resend send failed' };
+    }
+
+    // Fallback path: Gmail SMTP. Only reached when RESEND_API_KEY is NOT set.
+    const emailTransporter = initializeTransporter();
+
+    if (!emailTransporter) {
+      logger.error('❌ Email transporter not initialized. Owner notification will not be sent.');
+      return { success: false, error: 'Email transporter not configured' };
+    }
+
+    const emailUser = config.email.user;
+
+    const mailOptions = {
+      from: `"${config.email.shopName || 'Nectar Shop'}" <${emailUser}>`,
+      replyTo: replyToEmail || emailUser,
       to: recipientEmail,
       subject,
-      html: htmlBody,
       text: textBody,
-      replyTo: replyToEmail,
-    });
-    if (resendResult.success) {
-      return { ...resendResult, recipient: recipientEmail };
-    }
-    logger.warn('⚠️ Resend failed, falling back to Gmail SMTP', {
-      error: resendResult.error,
-      errorCode: resendResult.errorCode,
-    });
-  }
-
-  const emailTransporter = initializeTransporter();
-
-  if (!emailTransporter) {
-    logger.error('❌ Email transporter not initialized. Owner notification will not be sent.');
-    logger.error('   Set EMAIL_USER and EMAIL_PASSWORD (Gmail App Password) in server/.env');
-    return {
-      success: false,
-      error: 'Email transporter not configured',
-      method: 'email',
+      html: htmlBody,
+      headers: {
+        'X-Client-Email': clientEmailEarly,
+        'X-Client-Name': clientNameEarly,
+        'X-Order-ID': orderId || 'N/A',
+      },
     };
-  }
 
-  logger.info('✅ Email transporter is initialized');
+    try {
+      logger.info(`📧 Sending owner order notification via SMTP:`);
+      logger.info(`   From: ${emailUser}`);
+      logger.info(`   To: ${recipientEmail}`);
 
-  const clientEmail = clientEmailEarly;
-  const clientName = clientNameEarly;
-  const emailUser = config.email.user;
+      const info = await emailTransporter.sendMail(mailOptions);
 
-  const mailOptions = {
-    from: `"${config.email.shopName || 'Nectar Shop'}" <${emailUser}>`,
-    replyTo: replyToEmail || emailUser,
-    to: recipientEmail,
-    subject,
-    text: textBody,
-    html: htmlBody,
-    headers: {
-      'X-Client-Email': clientEmail,
-      'X-Client-Name': clientName,
-      'X-Order-ID': orderId || 'N/A',
-    },
-  };
+      logger.info(`✅ Owner notification sent to ${recipientEmail}`);
+      logger.info(`   Message ID: ${info.messageId}`);
 
-  try {
-    logEmailEnvCheck('[emailService] ENV CHECK (before owner send)');
-    // eslint-disable-next-line no-console
-    console.log('[emailService] Attempting to send owner email to:', recipientEmail);
-    // eslint-disable-next-line no-console
-    console.log('[emailService] Using Gmail account:', process.env.EMAIL_USER);
+      if (info.rejected && info.rejected.length > 0) {
+        return {
+          success: false,
+          error: `Email rejected: ${info.rejected.join(', ')}`,
+        };
+      }
 
-    logger.info(`📧 Sending owner order notification:`);
-    logger.info(`   From: ${emailUser}`);
-    logger.info(`   To: ${recipientEmail}`);
-    logger.info(`   Subject: ${mailOptions.subject}`);
-
-    const info = await emailTransporter.sendMail(mailOptions);
-
-    // eslint-disable-next-line no-console
-    console.log('[emailService] Owner email sent successfully:', info.messageId);
-
-    logger.info(`✅ Owner notification sent to ${recipientEmail}`);
-    logger.info(`   Message ID: ${info.messageId}`);
-    logger.info(`   Response: ${info.response || 'N/A'}`);
-
-    if (info.rejected && info.rejected.length > 0) {
-      logger.error(`⚠️ Email was rejected by server: ${info.rejected.join(', ')}`);
-      return {
-        success: false,
-        error: `Email rejected: ${info.rejected.join(', ')}`,
-        method: 'email',
-        recipient: recipientEmail,
-      };
+      return { success: true, id: info.messageId, recipient: recipientEmail };
+    } catch (error) {
+      logger.error('❌ Owner notification email error:', {
+        message: error.message,
+        code: error.code,
+      });
+      return { success: false, error: error.message };
     }
-
-    return {
-      success: true,
-      messageId: info.messageId,
-      method: 'email',
-      recipient: recipientEmail,
-    };
-  } catch (error) {
-    logger.error('❌ Owner notification email error:', {
-      message: error.message,
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode,
+  } catch (err) {
+    // Last-resort catch-all so the function ALWAYS resolves to a result object.
+    // eslint-disable-next-line no-console
+    console.log('Owner email failed:', err?.message);
+    logger.error('❌ Unexpected exception in sendOwnerOrderNotification', {
+      message: err?.message,
+      stack: err?.stack,
     });
-
-    if (error.code === 'EAUTH') {
-      logger.error('⚠️ Gmail authentication failed. Check EMAIL_USER and EMAIL_PASSWORD (App Password).');
-    } else if (error.code === 'EENVELOPE') {
-      logger.error(`⚠️ Invalid email address: ${error.message}`);
-    } else if (error.code === 'ECONNECTION') {
-      logger.error('⚠️ Connection to Gmail SMTP failed.');
-    }
-
-    return {
-      success: false,
-      error: error.message,
-      errorCode: error.code,
-      method: 'email',
-      recipient: recipientEmail,
-    };
+    return { success: false, error: err?.message || 'Unknown error' };
   }
 }
 
