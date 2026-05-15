@@ -79,7 +79,12 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   }, [items]);
 
   const getTotalPrice = useCallback(() => {
-    return items.reduce((total, item) => total + item.price * item.quantity, 0);
+    const rawTotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
+    const totalQuantity = items.reduce((total, item) => total + item.quantity, 0);
+    // When the cart holds more than one item, round the subtotal up to the
+    // next whole dollar so the customer-facing price has no decimals.
+    // Shipping is added on top separately and is not affected by this.
+    return totalQuantity > 1 ? Math.ceil(rawTotal) : rawTotal;
   }, [items]);
 
   // Memoize totals to prevent unnecessary recalculations

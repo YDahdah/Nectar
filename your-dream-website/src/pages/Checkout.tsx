@@ -159,12 +159,19 @@ const Checkout = () => {
       const shippingCost = formData.caza === "North Lebanon" ? 4.0 : 5.0;
       
       // Calculate subtotal safely from cart items
-      const subtotal = (items ?? []).reduce((sum, item) => {
+      const rawSubtotal = (items ?? []).reduce((sum, item) => {
         const price = Number(item?.price) || 0;
         const qty = Number(item?.quantity) || 1;
         return sum + price * qty;
       }, 0);
-      
+      const totalQuantity = (items ?? []).reduce((sum, item) => {
+        return sum + (Number(item?.quantity) || 1);
+      }, 0);
+
+      // Match the customer-facing rule: with more than one item, the perfume
+      // subtotal is ceilinged to the next whole dollar (shipping is not).
+      const subtotal = totalQuantity > 1 ? Math.ceil(rawSubtotal) : rawSubtotal;
+
       // Calculate total price with rounding
       const calculatedSubtotal = Math.round(subtotal * 100) / 100;
       const calculatedShipping = Math.round(shippingCost * 100) / 100;
