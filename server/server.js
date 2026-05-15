@@ -1,5 +1,7 @@
-import dotenv from "dotenv";
-dotenv.config();
+// CRITICAL: must be the first import. Loads dotenv and prints email/env
+// diagnostics BEFORE any other module is evaluated. See server/loadEnv.js
+// for why a plain `dotenv.config()` here would be too late in ES modules.
+import "./loadEnv.js";
 import express from "express";
 import morgan from "morgan";
 import compression from "compression";
