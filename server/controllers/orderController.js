@@ -1,4 +1,7 @@
-import { sendOwnerOrderNotification } from '../services/emailService.js';
+import {
+  sendOwnerOrderNotification,
+  sendCustomerConfirmationEmail,
+} from '../services/emailService.js';
 import logger from '../utils/logger.js';
 import { generateOrderId, calculateOrderTotal } from '../utils/helpers.js';
 
@@ -23,19 +26,61 @@ function withTimeout(promise, ms, label) {
   });
 }
 
+// Log the customer-confirmation outcome without ever affecting the HTTP response.
+// Customer confirmation is best-effort: failure here is normal when the Resend
+// sandbox sender is used (it only delivers to the Resend account owner), or
+// when no domain is verified yet. The order is already considered successful
+// once the owner notification path has completed.
+function logCustomerEmailOutcome(orderId, outcome) {
+  if (!outcome) return;
+  if (outcome.__timedOut) {
+    logger.warn('Customer confirmation email timed out — owner already notified', {
+      orderId,
+      timeoutMs: EMAIL_SEND_TIMEOUT_MS,
+    });
+    return;
+  }
+  if (outcome.__error) {
+    logger.warn('Customer confirmation email threw — owner already notified', {
+      orderId,
+      message: outcome.__error.message,
+      code: outcome.__error.code,
+    });
+    return;
+  }
+  if (!outcome.success) {
+    logger.warn('Customer confirmation email reported failure', {
+      orderId,
+      error: outcome.error,
+      errorCode: outcome.errorCode,
+    });
+    return;
+  }
+  logger.info('Customer confirmation email delivered', {
+    orderId,
+    recipient: outcome.recipient,
+    messageId: outcome.messageId,
+  });
+}
+
 /**
  * Checkout handler — email only, no persistence.
  *
  * Flow:
  *   1. Receive validated order payload from the frontend (req.body).
  *   2. Generate a one-off orderId and compute total.
- *   3. Email the order to OWNER_EMAIL / ORDER_EMAIL (resolved inside emailService),
- *      racing against EMAIL_SEND_TIMEOUT_MS so a hung SMTP connection can never
- *      stall the request.
- *   4. Respond with { success: true, orderId, total }. If the email step failed
- *      or timed out, we still respond success (the customer must not retry and
- *      create duplicates) AND we log the full order so the operator can recover
- *      it from logs.
+ *   3. In parallel, send two emails (each capped at EMAIL_SEND_TIMEOUT_MS):
+ *        a. Owner notification — to OWNER_EMAIL / ORDER_EMAIL (resolved inside
+ *           emailService). This is the email the operator depends on, so its
+ *           outcome drives the `emailDelivered` flag on the response.
+ *        b. Customer confirmation — to the buyer's email. Best-effort: its
+ *           outcome is only logged and never affects the HTTP response. This
+ *           failure is normal until a domain is verified in Resend
+ *           (the sandbox sender can't reach arbitrary recipients).
+ *   4. Respond with { success: true, orderId, total, emailDelivered }. If the
+ *      owner email failed/timed out we still respond success (the customer
+ *      must not retry and create duplicates) AND log the full order so the
+ *      operator can recover it from logs.
  *
  * No database, MongoDB, Supabase, Redis, or Google Sheets is required or used.
  */
@@ -52,11 +97,24 @@ export const createOrder = async (req, res, next) => {
       totalPrice: total,
     };
 
-    const outcome = await withTimeout(
-      sendOwnerOrderNotification(orderForEmail),
-      EMAIL_SEND_TIMEOUT_MS,
-      'owner-email',
-    );
+    // Fire both emails in parallel. The owner notification governs the response
+    // (it's the one the operator depends on). The customer confirmation is
+    // best-effort and is never allowed to affect `emailDelivered` or the
+    // status code — it just gets logged.
+    const [outcome, customerOutcome] = await Promise.all([
+      withTimeout(
+        sendOwnerOrderNotification(orderForEmail),
+        EMAIL_SEND_TIMEOUT_MS,
+        'owner-email',
+      ),
+      withTimeout(
+        sendCustomerConfirmationEmail(orderForEmail, orderId),
+        EMAIL_SEND_TIMEOUT_MS,
+        'customer-email',
+      ),
+    ]);
+
+    logCustomerEmailOutcome(orderId, customerOutcome);
 
     if (outcome && outcome.__timedOut) {
       logger.error('Owner order email timed out — order accepted but not yet delivered', {

@@ -976,48 +976,42 @@ function formatCustomerConfirmationEmailText(orderData, orderId = null) {
 }
 
 /**
- * Sends order confirmation email to customer
+ * Sends order confirmation email to customer.
+ *
+ * Transport strategy mirrors `sendOwnerOrderNotification`:
+ *   1. Resend HTTP API (preferred) — works on Render free tier where outbound
+ *      SMTP is blocked. NOTE: Resend's default sandbox sender
+ *      (`onboarding@resend.dev`) ONLY delivers to the email that owns the
+ *      Resend account. To send confirmations to real customers you MUST
+ *      verify a domain in Resend and set `RESEND_FROM_EMAIL`
+ *      (e.g. `orders@perfumenectar.com`).
+ *   2. Gmail SMTP fallback — only works on hosts that allow outbound SMTP.
  */
 export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
-  const emailTransporter = initializeTransporter();
-  
-  if (!emailTransporter) {
-    logger.warn('⚠️ Email transporter not initialized. Customer confirmation email will not be sent.');
-    return {
-      success: false,
-      error: 'Email transporter not configured',
-      method: 'email'
-    };
-  }
+  let customerEmail = orderData?.email;
+  const customerName = `${orderData?.firstName || ''} ${orderData?.lastName || ''}`.trim();
 
-  // Get customer's email and name from order data
-  let customerEmail = orderData.email;
-  const customerName = `${orderData.firstName} ${orderData.lastName}`;
-  
   if (!customerEmail) {
     logger.warn('⚠️ Customer email not provided. Skipping customer confirmation email.');
     return {
       success: false,
       error: 'Customer email not provided',
-      method: 'email'
+      method: 'email',
     };
   }
 
-  // Clean and validate email address
   customerEmail = customerEmail.trim().toLowerCase();
-  
-  // Basic email validation
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(customerEmail)) {
     logger.error(`❌ Invalid email address format: ${customerEmail}`);
     return {
       success: false,
       error: `Invalid email address format: ${customerEmail}`,
-      method: 'email'
+      method: 'email',
     };
   }
 
-  // Reject placeholder/test domains that don't accept email
   const invalidDomains = ['example.com', 'test.com', 'example.org', 'test.org', 'example.net'];
   const emailDomain = customerEmail.split('@')[1];
   if (invalidDomains.includes(emailDomain)) {
@@ -1025,11 +1019,45 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
     return {
       success: false,
       error: `Please use a real email address. ${emailDomain} is a test domain that doesn't accept email.`,
-      method: 'email'
+      method: 'email',
     };
   }
 
   logger.info(`📧 Preparing to send confirmation email to customer: ${customerEmail}`);
+
+  const subject = `✨ Order Confirmation - ${orderId || 'Your Order'}`;
+  const htmlBody = formatCustomerConfirmationEmailHTML(orderData, orderId);
+  const textBody = formatCustomerConfirmationEmailText(orderData, orderId);
+
+  // Prefer Resend whenever it's configured. Required on hosts that block
+  // outbound SMTP (e.g. Render free tier).
+  if (isResendConfigured()) {
+    logger.info('📧 Customer confirmation: trying Resend HTTP API first');
+    const resendResult = await sendViaResend({
+      to: customerEmail,
+      subject,
+      html: htmlBody,
+      text: textBody,
+    });
+    if (resendResult.success) {
+      return { ...resendResult, recipient: customerEmail };
+    }
+    logger.warn('⚠️ Resend failed for customer email, falling back to Gmail SMTP', {
+      error: resendResult.error,
+      errorCode: resendResult.errorCode,
+    });
+  }
+
+  const emailTransporter = initializeTransporter();
+
+  if (!emailTransporter) {
+    logger.warn('⚠️ Email transporter not initialized. Customer confirmation email will not be sent.');
+    return {
+      success: false,
+      error: 'Email transporter not configured',
+      method: 'email',
+    };
+  }
 
   const emailUser = config.email.user;
   const shopName = config.email.shopName;
@@ -1038,44 +1066,35 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
     from: `"${shopName}" <${emailUser}>`,
     replyTo: emailUser,
     to: customerEmail,
-    subject: `✨ Order Confirmation - ${orderId || 'Your Order'}`,
-    text: formatCustomerConfirmationEmailText(orderData, orderId),
-    html: formatCustomerConfirmationEmailHTML(orderData, orderId),
+    subject,
+    text: textBody,
+    html: htmlBody,
     headers: {
       'X-Customer-Name': customerName,
       'X-Order-ID': orderId || 'N/A',
-      'List-Unsubscribe': `<mailto:${emailUser}?subject=Unsubscribe>`
-    }
+      'List-Unsubscribe': `<mailto:${emailUser}?subject=Unsubscribe>`,
+    },
   };
 
   try {
-    logger.info(`📧 Attempting to send email:`);
+    logger.info(`📧 Attempting to send customer email via SMTP:`);
     logger.info(`   From: ${emailUser}`);
     logger.info(`   To: ${customerEmail}`);
     logger.info(`   Subject: ${mailOptions.subject}`);
-    logger.info(`   Email transporter initialized: ${emailTransporter ? 'Yes' : 'No'}`);
-    
-    // Verify transporter before sending
-    if (!emailTransporter) {
-      throw new Error('Email transporter is not initialized');
-    }
-    
+
     const info = await emailTransporter.sendMail(mailOptions);
-    
+
     logger.info(`✅ Customer confirmation email sent successfully to ${customerEmail}`);
     logger.info(`   Message ID: ${info.messageId}`);
     logger.info(`   Response: ${info.response}`);
-    logger.info(`   Accepted: ${info.accepted}`);
-    logger.info(`   Rejected: ${info.rejected}`);
 
-    // Check if email was actually accepted
     if (info.rejected && info.rejected.length > 0) {
       logger.error(`⚠️ Email was rejected by server: ${info.rejected.join(', ')}`);
       return {
         success: false,
         error: `Email rejected: ${info.rejected.join(', ')}`,
         method: 'email',
-        recipient: customerEmail
+        recipient: customerEmail,
       };
     }
 
@@ -1083,7 +1102,7 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
       success: true,
       messageId: info.messageId,
       method: 'email',
-      recipient: customerEmail
+      recipient: customerEmail,
     };
   } catch (error) {
     if (error.code === 'EAUTH') {
@@ -1095,7 +1114,8 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
       success: false,
       error: error.message,
       errorCode: error.code,
-      method: 'email'
+      method: 'email',
+      recipient: customerEmail,
     };
   }
 }
