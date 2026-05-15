@@ -32,7 +32,20 @@ export function performanceMiddleware(req, res, next) {
     (metrics.requests.byMethod[req.method] || 0) + 1;
   metrics.requests.byRoute[route] = (metrics.requests.byRoute[route] || 0) + 1;
 
-  // Track response time
+  // Attach X-Response-Time JUST BEFORE headers are flushed.
+  // Previously we set this header inside `res.on("finish", ...)` — by then
+  // the response had already been sent, which raised ERR_HTTP_HEADERS_SENT
+  // on every request. Hooking writeHead lets us actually set the header,
+  // and the `headersSent` guard prevents a crash in any edge case where
+  // headers were already flushed by another path.
+  const originalWriteHead = res.writeHead.bind(res);
+  res.writeHead = function patchedWriteHead(...args) {
+    safeSetHeader(res, "X-Response-Time", `${Date.now() - startTime}ms`);
+    return originalWriteHead(...args);
+  };
+
+  // Track response time AFTER the response is fully sent.
+  // No header writes happen here — `finish` fires after headers are gone.
   res.on("finish", () => {
     const duration = Date.now() - startTime;
     metrics.responseTimes.push(duration);
@@ -42,23 +55,37 @@ export function performanceMiddleware(req, res, next) {
       metrics.responseTimes.shift();
     }
 
-    // Track errors
     if (res.statusCode >= 400) {
       metrics.requests.errors++;
     }
 
-    // Log slow requests (> 1 second)
     if (duration > 1000) {
       logger.warn(
         `Slow request: ${req.method} ${route} took ${duration}ms (Status: ${res.statusCode})`
       );
     }
-
-    // Add performance headers
-    res.setHeader("X-Response-Time", `${duration}ms`);
   });
 
   next();
+}
+
+/**
+ * Set a response header without crashing if the response has already
+ * been finalized. Emits a warning instead of letting Node throw
+ * ERR_HTTP_HEADERS_SENT.
+ */
+function safeSetHeader(res, name, value) {
+  if (res.headersSent) {
+    // eslint-disable-next-line no-console
+    console.warn("Skipped header write: response already sent");
+    return;
+  }
+  try {
+    res.setHeader(name, value);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("Skipped header write: response already sent", err?.message);
+  }
 }
 
 /**
