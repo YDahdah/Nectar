@@ -36,89 +36,56 @@ function isResendConfigured() {
   return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim());
 }
 
-async function sendViaResend({ to, subject, html, text, replyTo }) {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) {
-    return { success: false, error: 'RESEND_API_KEY not set', skipped: true };
-  }
-
-  const shopName = (process.env.SHOP_NAME || config.email.shopName || 'Nectar Perfume Shop').trim();
-  const fromAddress = (process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev').trim();
-  const from = `${shopName} <${fromAddress}>`;
-
-  const payload = {
-    from,
-    to: Array.isArray(to) ? to : [to],
-    subject,
-    html,
-    text,
-  };
-  if (replyTo) payload.reply_to = replyTo;
-
-  // 15s cap — Resend normally responds in <1s. Anything longer means the
-  // hosting platform is rate-limiting outbound HTTPS, and we should fall back
-  // to nodemailer rather than stall the checkout request.
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
-
+async function sendViaResend({ to, subject, html }) {
   try {
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    // eslint-disable-next-line no-console
+    console.log("[Resend] Starting send", { to, subject });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
       signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_EMAIL || "Nectar Perfume <onboarding@resend.dev>",
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html,
+      }),
     });
 
-    const bodyText = await resp.text();
-    let body = null;
+    clearTimeout(timeout);
+
+    const text = await response.text();
+    let data;
     try {
-      body = bodyText ? JSON.parse(bodyText) : null;
+      data = JSON.parse(text);
     } catch {
-      body = { raw: bodyText };
+      data = { raw: text };
     }
 
-    if (!resp.ok) {
-      logger.error('❌ Resend rejected the request', {
-        status: resp.status,
-        body,
-      });
-      return {
-        success: false,
-        error: body?.message || `Resend HTTP ${resp.status}`,
-        errorCode: body?.name || `HTTP_${resp.status}`,
-        method: 'resend',
-      };
+    if (!response.ok) {
+      // eslint-disable-next-line no-console
+      console.error("[Resend] Failed", response.status, data);
+      return { success: false, status: response.status, error: data };
     }
 
-    logger.info('✅ Owner notification sent via Resend', { id: body?.id });
-    return {
-      success: true,
-      messageId: body?.id,
-      method: 'resend',
-      recipient: payload.to.join(', '),
-    };
-  } catch (err) {
-    if (err?.name === 'AbortError') {
-      logger.error('❌ Resend request timed out after 15s');
-      return {
-        success: false,
-        error: 'Resend request timed out',
-        errorCode: 'TIMEOUT',
-        method: 'resend',
-      };
-    }
-    logger.error('❌ Resend request threw', { message: err?.message });
-    return {
-      success: false,
-      error: err?.message || 'Resend request failed',
-      errorCode: err?.code,
-      method: 'resend',
-    };
-  } finally {
-    clearTimeout(timer);
+    // eslint-disable-next-line no-console
+    console.log("[Resend] Success", data);
+    return { success: true, data };
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("[Resend] Exception", {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    });
+    return { success: false, error: error.message };
   }
 }
 
@@ -408,9 +375,9 @@ function initializeTransporter() {
  * Formats order data into HTML email format
  */
 function formatOrderEmailHTML(orderData, orderId = null) {
-  // Defensive checks
   if (!orderData || typeof orderData !== 'object') {
-    throw new Error('Invalid order data provided to formatOrderEmailHTML');
+    logger.warn('formatOrderEmailHTML received invalid orderData; using safe defaults');
+    orderData = {};
   }
 
   const {
@@ -590,9 +557,9 @@ function formatOrderEmailHTML(orderData, orderId = null) {
  * Formats order data into plain text email format
  */
 function formatOrderEmailText(orderData, orderId = null) {
-  // Defensive checks
   if (!orderData || typeof orderData !== 'object') {
-    throw new Error('Invalid order data provided to formatOrderEmailText');
+    logger.warn('formatOrderEmailText received invalid orderData; using safe defaults');
+    orderData = {};
   }
 
   const {
@@ -673,9 +640,9 @@ function formatOrderEmailText(orderData, orderId = null) {
  * Formats customer confirmation email into HTML format
  */
 function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
-  // Defensive checks
   if (!orderData || typeof orderData !== 'object') {
-    throw new Error('Invalid order data provided to formatCustomerConfirmationEmailHTML');
+    logger.warn('formatCustomerConfirmationEmailHTML received invalid orderData; using safe defaults');
+    orderData = {};
   }
 
   const {
@@ -890,9 +857,9 @@ function formatCustomerConfirmationEmailHTML(orderData, orderId = null) {
  * Formats customer confirmation email into plain text format
  */
 function formatCustomerConfirmationEmailText(orderData, orderId = null) {
-  // Defensive checks
   if (!orderData || typeof orderData !== 'object') {
-    throw new Error('Invalid order data provided to formatCustomerConfirmationEmailText');
+    logger.warn('formatCustomerConfirmationEmailText received invalid orderData; using safe defaults');
+    orderData = {};
   }
 
   const {
@@ -1030,7 +997,7 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
     logger.info(`📧 Preparing to send confirmation email to customer: ${customerEmail}`);
 
     const subject = `✨ Order Confirmation - ${orderId || 'Your Order'}`;
-    const htmlBody = formatCustomerConfirmationEmailHTML(orderData, orderId);
+    const html = formatCustomerConfirmationEmailHTML(orderData, orderId);
     const textBody = formatCustomerConfirmationEmailText(orderData, orderId);
 
     // When RESEND_API_KEY is set, Resend is the ONLY transport we use.
@@ -1039,33 +1006,7 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
     if (isResendConfigured()) {
       // eslint-disable-next-line no-console
       console.log('Sending customer email via Resend...');
-      let resendResult;
-      try {
-        resendResult = await sendViaResend({
-          to: customerEmail,
-          subject,
-          html: htmlBody,
-          text: textBody,
-        });
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.log('Customer email failed:', err?.message);
-        return { success: false, error: err?.message || 'Resend send threw' };
-      }
-
-      // eslint-disable-next-line no-console
-      console.log('Customer email sent/resend response:', {
-        success: resendResult?.success,
-        id: resendResult?.messageId,
-        error: resendResult?.error,
-      });
-
-      if (resendResult?.success) {
-        return { success: true, id: resendResult.messageId, recipient: customerEmail };
-      }
-      // eslint-disable-next-line no-console
-      console.log('Customer email failed:', resendResult?.error);
-      return { success: false, error: resendResult?.error || 'Resend send failed' };
+      return await sendViaResend({ to: customerEmail, subject, html });
     }
 
     // Fallback path: Gmail SMTP. Only reached when RESEND_API_KEY is NOT set
@@ -1086,7 +1027,7 @@ export async function sendCustomerConfirmationEmail(orderData, orderId = null) {
       to: customerEmail,
       subject,
       text: textBody,
-      html: htmlBody,
+      html,
       headers: {
         'X-Customer-Name': customerName,
         'X-Order-ID': orderId || 'N/A',
@@ -1181,7 +1122,7 @@ export async function sendOwnerOrderNotification(order) {
     const clientNameEarly =
       `${order.firstName || ''} ${order.lastName || ''}`.trim() || 'Customer';
     const subject = `🛍️ New Order from ${clientNameEarly} (${clientEmailEarly}) — ${orderId || 'Order'}`;
-    const htmlBody = formatOrderEmailHTML(order, orderId);
+    const html = formatOrderEmailHTML(order, orderId);
     const textBody = formatOrderEmailText(order, orderId);
     const replyToEmail =
       clientEmailEarly !== 'No email provided' && clientEmailEarly ? clientEmailEarly : undefined;
@@ -1192,34 +1133,7 @@ export async function sendOwnerOrderNotification(order) {
     if (isResendConfigured()) {
       // eslint-disable-next-line no-console
       console.log('Sending owner email via Resend...');
-      let resendResult;
-      try {
-        resendResult = await sendViaResend({
-          to: recipientEmail,
-          subject,
-          html: htmlBody,
-          text: textBody,
-          replyTo: replyToEmail,
-        });
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.log('Owner email failed:', err?.message);
-        return { success: false, error: err?.message || 'Resend send threw' };
-      }
-
-      // eslint-disable-next-line no-console
-      console.log('Owner email sent/resend response:', {
-        success: resendResult?.success,
-        id: resendResult?.messageId,
-        error: resendResult?.error,
-      });
-
-      if (resendResult?.success) {
-        return { success: true, id: resendResult.messageId, recipient: recipientEmail };
-      }
-      // eslint-disable-next-line no-console
-      console.log('Owner email failed:', resendResult?.error);
-      return { success: false, error: resendResult?.error || 'Resend send failed' };
+      return await sendViaResend({ to: process.env.OWNER_EMAIL || process.env.ORDER_EMAIL, subject, html });
     }
 
     // Fallback path: Gmail SMTP. Only reached when RESEND_API_KEY is NOT set.
@@ -1238,7 +1152,7 @@ export async function sendOwnerOrderNotification(order) {
       to: recipientEmail,
       subject,
       text: textBody,
-      html: htmlBody,
+      html,
       headers: {
         'X-Client-Email': clientEmailEarly,
         'X-Client-Name': clientNameEarly,

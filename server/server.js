@@ -29,6 +29,14 @@ import emailRoutes from "./routes/emailRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import cors from "cors";
 
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+
 const app = express();
 
 // Trust proxy (important for rate limiting and IP detection)
