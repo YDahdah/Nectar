@@ -89,21 +89,35 @@ export function validateOrder(data) {
     };
   }
 
-  // Additional validation: verify total price matches items (round to avoid float drift)
-  const calculatedSubtotal = Math.round(
-    value.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 100
-  ) / 100;
+  // Additional validation: verify total price matches items (round to avoid float drift).
+  // Customer-facing rule (mirrored from your-dream-website/src/contexts/CartContext.tsx):
+  // when the cart holds more than one item the perfume subtotal is ceilinged to the
+  // next whole dollar so the displayed price has no decimals. Shipping is added on top
+  // and is not affected by the ceiling. We accept either the exact sum or the
+  // ceiling-rounded sum so both the cart UI and any older clients keep working.
+  const rawSubtotal = value.items.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+  const exactSubtotal = Math.round(rawSubtotal * 100) / 100;
+  const totalQuantity = value.items.reduce(
+    (sum, item) => sum + item.quantity,
+    0
+  );
+  const ceilingSubtotal = totalQuantity > 1 ? Math.ceil(rawSubtotal) : exactSubtotal;
   const shipping = Number(value.shippingCost) || 0;
-  const calculatedTotal = Math.round((calculatedSubtotal + shipping) * 100) / 100;
+  const exactTotal = Math.round((exactSubtotal + shipping) * 100) / 100;
+  const ceilingTotal = Math.round((ceilingSubtotal + shipping) * 100) / 100;
   const providedTotal = Math.round(Number(value.totalPrice) * 100) / 100;
 
-  const priceDifference = Math.abs(calculatedTotal - providedTotal);
-  if (priceDifference > 0.01) {
+  const matchesExact = Math.abs(exactTotal - providedTotal) <= 0.01;
+  const matchesCeiling = Math.abs(ceilingTotal - providedTotal) <= 0.01;
+  if (!matchesExact && !matchesCeiling) {
     return {
       isValid: false,
       errors: [{
         field: 'totalPrice',
-        message: `Total price mismatch. Calculated: $${calculatedTotal.toFixed(2)}, Provided: $${providedTotal.toFixed(2)}`
+        message: `Total price mismatch. Calculated: $${exactTotal.toFixed(2)}, Provided: $${providedTotal.toFixed(2)}`
       }],
       data: null
     };
